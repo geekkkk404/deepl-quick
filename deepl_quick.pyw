@@ -2,8 +2,10 @@
 置顶无边框小窗：输入文本（源语言自动检测），勾选的常驻目标语一键翻译，逐语种一键复制。
 数据纯本地（脚本同目录 config.json / cache.json / history.json；密钥独立存 .deepl-key，绝不入库）。
 额度纪律：缓存优先（命中零调用）、默认手动触发（Ctrl+Enter）、456 额度耗尽绝不重试、429/529 退避重试。
-用法：双击运行；`python deepl_quick.pyw --smoke` 为自检模式（重定向数据文件到临时目录、不发网络请求）。
+用法：双击运行；`python deepl_quick.pyw --smoke` 为自检模式（重定向数据文件到临时目录、不发网络请求）；
+`--minimized` 启动即缩成贴边药丸（开机自启命令自带此参数，开关在设置弹窗）。
 """
+import ctypes
 import hashlib
 import json
 import os
@@ -13,12 +15,13 @@ import threading
 import time
 import urllib.error
 import urllib.request
+import winreg
 from datetime import datetime
 import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import messagebox
 
-APP_VERSION = "0.1"
+APP_VERSION = "0.2"
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE = os.path.join(APP_DIR, "config.json")
@@ -34,6 +37,8 @@ CACHE_MAX = 3000
 HISTORY_MAX = 500
 AUTO_DELAY_MS = 1500                       # 防抖自动翻译：输入停止后延迟
 TARGETS_MAX = 8                            # 常驻目标语上限（保持前端干净）
+RUN_KEY_PATH = r"Software\Microsoft\Windows\CurrentVersion\Run"  # 开机自启落点（HKCU，免管理员）
+AUTOSTART_NAME = "deepl-quick"             # Run 键值名（任务管理器「启动应用」页显示这个名字）
 
 FONT = "Microsoft YaHei UI"
 W, H = 560, 620
@@ -170,6 +175,57 @@ def key_masked(key):
         return "未设置"
     tail = key[-4:] if len(key) >= 4 else key
     return f"已设置（…{tail}）"
+
+
+# ---------------------------------------------------------------- 开机自启（U-004 拍板方案 A：注册表 HKCU Run 键）
+
+def _autostart_cmd():
+    """自启命令。优先 pythonw.exe 免登录闪控制台；--minimized 使自启直接呈药丸态
+    （手动双击不带此参数、仍开完整窗）；预留 PyInstaller 打包分支（sys.frozen 时 exe 即一切）。"""
+    if getattr(sys, "frozen", False):
+        return f'"{sys.executable}" --minimized'
+    exe = sys.executable
+    pyw = os.path.join(os.path.dirname(exe), "pythonw.exe")
+    if os.path.basename(exe).lower() != "pythonw.exe" and os.path.exists(pyw):
+        exe = pyw
+    return f'"{exe}" "{os.path.abspath(sys.argv[0])}" --minimized'
+
+
+def autostart_enabled(key_path=RUN_KEY_PATH):
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_READ) as k:
+            winreg.QueryValueEx(k, AUTOSTART_NAME)
+        return True
+    except OSError:
+        return False
+
+
+def autostart_enable(key_path=RUN_KEY_PATH):
+    """upsert：键不存在则建；文件移动后重新保存一次设置即自愈。"""
+    with winreg.CreateKey(winreg.HKEY_CURRENT_USER, key_path) as k:
+        winreg.SetValueEx(k, AUTOSTART_NAME, 0, winreg.REG_SZ, _autostart_cmd())
+
+
+def autostart_disable(key_path=RUN_KEY_PATH):
+    """幂等：键或值不存在时静默成功。"""
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE) as k:
+            winreg.DeleteValue(k, AUTOSTART_NAME)
+    except FileNotFoundError:
+        pass
+
+
+def acquire_single_instance(name="deepl_quick_singleton"):
+    """防双开：自启药丸常驻时再手动双击，右缘会叠出两枚胶囊。成功分支的互斥句柄
+    刻意随进程存活不关闭；互斥创建失败宁可放行也不拦启动（fail-open）。"""
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    handle = k32.CreateMutexW(None, False, name)
+    if not handle:
+        return True
+    if ctypes.get_last_error() == 183:       # ERROR_ALREADY_EXISTS
+        k32.CloseHandle(handle)
+        return False
+    return True
 
 
 def pick_host(key, mode="auto", override=""):
@@ -924,7 +980,7 @@ class App:
         win.configure(bg=BG)
         win.resizable(False, False)
         win.transient(self.root)
-        self._center(win, 440, 420)
+        self._center(win, 500, 446)   # 500：六个 mini 按钮一行放得下——440 时「关闭」被 pack 挤成 1px（P-009）
 
         row = tk.Frame(win, bg=BG)
         row.pack(fill="x", padx=14, pady=(14, 4))
@@ -938,7 +994,7 @@ class App:
                                 highlightcolor=TITLE_BG)
         self.ent_key.pack(fill="x", padx=14, pady=(2, 4))
         tk.Label(win, text="粘贴后点「保存设置」覆盖旧 key；点「删除 key」移除。key 只存本地 .deepl-key，绝不入库。",
-                 bg=BG, fg="#999999", font=(FONT, 8), wraplength=410, justify="left"
+                 bg=BG, fg="#999999", font=(FONT, 8), wraplength=466, justify="left"
                  ).pack(fill="x", padx=14)
 
         hr = tk.Frame(win, bg=BG)
@@ -958,11 +1014,13 @@ class App:
         self.var_quality = tk.BooleanVar(value=bool(self.cfg.get("model_quality")))
         self.var_auto = tk.BooleanVar(value=bool(self.cfg.get("auto_translate")))
         self.var_top = tk.BooleanVar(value=bool(self.cfg.get("topmost")))
+        self.var_autostart = tk.BooleanVar(value=autostart_enabled())  # 唯一事实源=注册表，不落 config.json
         for label, var, tip in (
                 ("保存历史记录（历史即翻译缓存）", self.var_hist, ""),
                 ("高质量模式（next-gen 模型，质量优先）", self.var_quality, ""),
                 ("输入停止后自动翻译（防抖 1.5s，默认关）", self.var_auto, ""),
-                ("窗口置顶", self.var_top, "")):
+                ("窗口置顶", self.var_top, ""),
+                ("开机自启（登录后缩成右缘药丸）", self.var_autostart, "")):
             tk.Checkbutton(win, text=label, variable=var, bg=BG, font=(FONT, 10),
                            anchor="w").pack(fill="x", padx=14)
 
@@ -994,12 +1052,21 @@ class App:
         save_config_file(self.cfg)
         self.root.attributes("-topmost", bool(self.cfg["topmost"]))
         self._update_pin()
+        _as_err = None           # 自启差量生效：勾选状态与注册表翻转了才写（U-004）
+        try:
+            if bool(self.var_autostart.get()) != autostart_enabled():
+                (autostart_enable if self.var_autostart.get() else autostart_disable)()
+        except OSError as e:
+            _as_err = e          # 留到弹窗关闭后统一报，免被「设置已保存」覆盖
         self.lbl_key_state.configure(text=key_masked(self.key))
         self._update_estimate()
         self._refresh_usage_async(force=True)
         if self._settings is not None and self._settings.winfo_exists():
             self._settings.destroy()
-        self.set_status("设置已保存")
+        if _as_err is None:
+            self.set_status("设置已保存")
+        else:
+            self.set_status(f"已保存，但开机自启写入失败：{_as_err}", err=True)
 
     def _delete_key(self):
         if messagebox.askokcancel("删除 key", "确定删除本机保存的 API key？（不影响你的 DeepL 账号，仅清掉本地 .deepl-key）"):
@@ -1347,6 +1414,35 @@ def run_smoke():
     langs3 = fetch_target_languages("k", HOST_FREE, request_fn=v3pair)
     check("langs v3 filter", [c for c, _n, _f in langs3] == ["DE"])
 
+    # 15 开机自启（U-004 方案 A）：注册表读写全走 scratch 键，绝不碰真实 Run 键
+    cmd = _autostart_cmd()
+    check("autostart cmd shape", cmd.startswith('"') and cmd.endswith('" --minimized')
+          and '" "' in cmd and ".pyw" in cmd)
+    scratch = r"Software\deepl_quick_smoke_test"
+    try:
+        check("autostart initial off", not autostart_enabled(scratch))
+        autostart_enable(scratch)
+        check("autostart enable", autostart_enabled(scratch))
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, scratch, 0, winreg.KEY_READ) as k:
+            stored = winreg.QueryValueEx(k, AUTOSTART_NAME)[0]
+        check("autostart stored cmd", stored == cmd)
+        autostart_enable(scratch)                     # upsert（文件移动后重存自愈）
+        check("autostart upsert", autostart_enabled(scratch))
+        autostart_disable(scratch)
+        check("autostart disable", not autostart_enabled(scratch))
+        autostart_disable(scratch)                    # 幂等：键值已删，静默成功
+        check("autostart disable idempotent", not autostart_enabled(scratch))
+    finally:
+        try:
+            winreg.DeleteKey(winreg.HKEY_CURRENT_USER, scratch)
+        except OSError:
+            pass
+
+    # 16 单实例互斥（防自启+手动双开叠出两枚药丸）；scratch 名不与真实运行实例冲突
+    mname = f"deepl_quick_smoke_{os.getpid()}"
+    check("single instance first", acquire_single_instance(mname) is True)
+    check("single instance second", acquire_single_instance(mname) is False)
+
     passed = sum(1 for _n, ok in results if ok)
     for name, ok in results:
         print(f"  {'PASS' if ok else 'FAIL'}  {name}")
@@ -1355,8 +1451,13 @@ def run_smoke():
 
 
 def main():
+    if not acquire_single_instance():
+        return                   # 已有实例在跑（自启的那枚药丸就在右缘）——静默退出
     root = tk.Tk()
-    App(root)
+    app = App(root)
+    if "--minimized" in sys.argv:
+        root.update_idletasks()  # 先让 _restore_window 的 geometry 落地，折叠取到的尺寸才真实
+        app._enter_pill(force=True)   # force：登录启动时指针可能恰在窗区，不许弹回全窗
     root.mainloop()
 
 

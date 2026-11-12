@@ -11,7 +11,7 @@
   <img src="assets/pill.png" alt="贴边药丸" width="60">
 </p>
 
-当前版本：**v0.1** ・ License：[MIT](LICENSE)
+当前版本：**v0.2** ・ License：[MIT](LICENSE)
 
 [中文](#-中文) ・ [English](#english)
 
@@ -28,6 +28,7 @@
 ### 特性
 
 - **贴边药丸常驻**：鼠标离开约 0.75s 自动折叠成 39×30 胶囊，悬停展开、静止不弹跳、拖动中不折叠；窗口位置与药丸位置均有记忆
+- **开机自启（可选）**：设置弹窗勾选即写 HKCU Run 键（免管理员），登录后直接缩成贴边药丸；Windows 任务管理器「启动应用」可随时停用；自带单实例保护，不会叠出两枚药丸
 - **自动检测源语言**：无需选择源语言，DeepL 返回检测结果并显示在界面上
 - **常驻目标语言**：默认英/日/中，可从完整语言清单勾选（上限 8 个，保持界面干净）；清单支持在线刷新，DeepL 新增语言不用升级本工具
 - **逐语种一键复制**：每张译文卡片独立复制；「复制全部」按【语言】前缀合并
@@ -52,7 +53,7 @@
 | 复制全部译文 | 「复制全部」 |
 | 增删常驻语言 | 语言条「＋语言」；chip 上「×」移除 |
 | 历史 | 标题栏「史」，双击条目回填原文 |
-| 设置（key / 高质量模式 / 历史开关 / host） | 标题栏「设」 |
+| 设置（key / 高质量模式 / 历史开关 / host / 开机自启） | 标题栏「设」 |
 | 折叠 / 展开 | 标题栏「—」；或鼠标离开 / 悬停自动 |
 | 拖动 / 调整大小 | 拖标题栏；右下角「◢」 |
 | 置顶开关 | 标题栏「钉」（绿=开） |
@@ -74,7 +75,7 @@
 python deepl_quick.pyw --smoke
 ```
 
-29 项自检全部离线运行（数据文件重定向到临时目录，不发任何网络请求）。
+38 项自检全部离线运行（数据文件重定向到临时目录、注册表读写走 scratch 键，不发任何网络请求）。
 
 ### License
 
@@ -93,6 +94,7 @@ Sibling project: [QuadTodo](https://github.com/geekkkk404/quad-todo) — same si
 ### Features
 
 - **Edge pill, always resident** — auto-collapses (~0.75s) to a 39×30 pill when the mouse leaves; hover to expand; no bounce while idle, no collapse while dragging; both window and pill positions are remembered
+- **Optional auto-start** — tick it in settings to register an HKCU Run key (no admin needed); the pill docks itself at login; disable anytime from Task Manager → Startup apps; single-instance guard included
 - **Auto source detection** — no language picking; DeepL returns the detected language and the UI shows it
 - **Pinned target languages** — EN/JA/ZH by default, pick from the full language list (up to 8 to keep the UI clean); the list can be refreshed online, so new DeepL languages appear without upgrading this tool
 - **One-click copy per language** — each card copies independently; "copy all" merges with `【Language】` prefixes
@@ -125,7 +127,7 @@ Usage is counted in **source characters**: translating one text into 3 languages
 python deepl_quick.pyw --smoke
 ```
 
-29 offline checks (data files are redirected to a temp directory; no network requests).
+38 offline checks (data files go to a temp directory, registry writes go to a scratch key; no network requests).
 
 ### License
 
