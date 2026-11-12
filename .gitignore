@@ -1,0 +1,23 @@
+# ===== 隐私文件（第一天就收编——QuadTodo P-013 教训：私人文件绝不先进库再撤）=====
+开发账本.md
+.deepl-key
+config.json
+config.json.corrupt
+cache.json
+history.json
+
+# ===== Python =====
+__pycache__/
+*.pyc
+*.pyo
+
+# ===== 构建 / 发布产物 =====
+build/
+dist/
+
+# ===== 维护者本地私有件（沿用 QuadTodo 模式：不入库，换机手动迁移）=====
+.gitee-token
+
+# ===== Windows 垃圾 =====
+Thumbs.db
+Desktop.ini
