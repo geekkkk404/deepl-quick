@@ -11,7 +11,7 @@
   <img src="assets/pill.png" alt="贴边药丸" width="60">
 </p>
 
-当前版本：**v0.2** ・ License：[MIT](LICENSE)
+当前版本：**v0.3** ・ License：[MIT](LICENSE)
 
 [中文](#-中文) ・ [English](#english)
 
@@ -30,7 +30,8 @@
 - **贴边药丸常驻**：鼠标离开约 0.75s 自动折叠成 39×30 胶囊，悬停展开、静止不弹跳、拖动中不折叠；窗口位置与药丸位置均有记忆
 - **开机自启（可选）**：设置弹窗勾选即写 HKCU Run 键（免管理员），登录后直接缩成贴边药丸；Windows 任务管理器「启动应用」可随时停用；自带单实例保护，不会叠出两枚药丸
 - **自动检测源语言**：无需选择源语言，DeepL 返回检测结果并显示在界面上
-- **常驻目标语言**：默认英/日/中，可从完整语言清单勾选（上限 8 个，保持界面干净）；清单支持在线刷新，DeepL 新增语言不用升级本工具
+- **常驻目标语言**：默认英/日/中，可从完整语言清单勾选（上限 8 个，保持界面干净）；清单支持在线刷新（DeepL 现已支持 111 门目标语言），DeepL 新增语言不用升级本工具；语言名以原生名显示（日本語 / Deutsch / Français…）
+- **界面多语言**：界面自动跟随 Windows 系统语言（中文 / English），可在设置中强制指定，切换即时生效
 - **逐语种一键复制**：每张译文卡片独立复制；「复制全部」按【语言】前缀合并
 - **省额度三件套**：翻译缓存（同文本同语言命中零消耗）、用量仪表（80%/95% 变色预警）、目标语懒加载
 - **本地翻译历史**：可在设置中关闭或一键清空；双击历史条目回填原文
@@ -53,7 +54,7 @@
 | 复制全部译文 | 「复制全部」 |
 | 增删常驻语言 | 语言条「＋语言」；chip 上「×」移除 |
 | 历史 | 标题栏「史」，双击条目回填原文 |
-| 设置（key / 高质量模式 / 历史开关 / host / 开机自启） | 标题栏「设」 |
+| 设置（key / 高质量模式 / 历史开关 / host / 开机自启 / 界面语言） | 标题栏「设」 |
 | 折叠 / 展开 | 标题栏「—」；或鼠标离开 / 悬停自动 |
 | 拖动 / 调整大小 | 拖标题栏；右下角「◢」 |
 | 置顶开关 | 标题栏「钉」（绿=开） |
@@ -65,6 +66,12 @@
 - **历史与缓存纯本地**（`history.json` / `cache.json`），可在设置里关闭、清空
 - 翻译内容只会发给 DeepL——这是它的工作方式
 
+### 已知限制
+
+- 界面语言提供中文与英文；其他语言的系统会回落到英文界面
+- 阿拉伯语 / 希伯来语等从右到左（RTL）书写的译文正常显示，但界面本身不支持 RTL 布局
+- 语言选择器中，内置 35 门常用语言以原生名显示；在线刷新拉到的其余语言显示 DeepL 返回的英文名
+
 ### 额度说明
 
 计费按**源文本字符数**：同一段文本翻 3 门语言 = 3 次请求 = 3 倍字符。本工具为此内置：缓存优先（命中零消耗）、默认手动触发（防抖自动翻可开）、每次翻译前显示预估消耗、额度耗尽（HTTP 456）明确提示不再重试。
@@ -75,7 +82,7 @@
 python deepl_quick.pyw --smoke
 ```
 
-38 项自检全部离线运行（数据文件重定向到临时目录、注册表读写走 scratch 键，不发任何网络请求）。
+47 项自检全部离线运行（数据文件重定向到临时目录、注册表读写走 scratch 键，不发任何网络请求）。
 
 ### License
 
@@ -96,8 +103,9 @@ Sibling project: [QuadTodo](https://github.com/geekkkk404/quad-todo) — same si
 - **Edge pill, always resident** — auto-collapses (~0.75s) to a 39×30 pill when the mouse leaves; hover to expand; no bounce while idle, no collapse while dragging; both window and pill positions are remembered
 - **Optional auto-start** — tick it in settings to register an HKCU Run key (no admin needed); the pill docks itself at login; disable anytime from Task Manager → Startup apps; single-instance guard included
 - **Auto source detection** — no language picking; DeepL returns the detected language and the UI shows it
-- **Pinned target languages** — EN/JA/ZH by default, pick from the full language list (up to 8 to keep the UI clean); the list can be refreshed online, so new DeepL languages appear without upgrading this tool
-- **One-click copy per language** — each card copies independently; "copy all" merges with `【Language】` prefixes
+- **Pinned target languages** — EN/JA/ZH by default, pick from the full language list (up to 8 to keep the UI clean); the list can be refreshed online (DeepL currently serves 111 target languages), so new DeepL languages appear without upgrading this tool; languages are shown by their native names (日本語 / Deutsch / Français…)
+- **Multilingual UI** — the interface follows your Windows system language (Chinese / English), and can be pinned to either in Settings; switching applies instantly
+- **One-click copy per language** — each card copies independently; "copy all" merges with language-name prefixes
 - **Quota-friendly trio** — translation cache (cache hits cost nothing), usage badge (amber ≥80%, orange ≥95%), per-request cost estimate before translating
 - **Local history** — toggleable and clearable in settings; double-click an entry to refill the source text
 - **High-quality mode** — optionally uses DeepL's next-gen model (`quality_optimized`) at no extra quota cost
@@ -117,6 +125,12 @@ Sibling project: [QuadTodo](https://github.com/geekkkk404/quad-todo) — same si
 - **History and cache are local files** (`history.json` / `cache.json`), toggleable and clearable in settings
 - Your text goes to DeepL — that's the job
 
+### Known limitations
+
+- The UI ships in Chinese and English; other system languages fall back to English
+- RTL scripts (Arabic, Hebrew…) display fine as translation output, but the UI itself does not mirror
+- In the language picker, the 35 built-in languages show native names; the rest of the online list shows DeepL's English names
+
 ### Quota notes
 
 Usage is counted in **source characters**: translating one text into 3 languages = 3 requests = 3× characters. This tool therefore ships with: cache-first requests (hits cost nothing), manual trigger by default (debounced auto-translate is optional), a per-request cost estimate, and a clear stop on quota exhaustion (HTTP 456).
@@ -127,7 +141,7 @@ Usage is counted in **source characters**: translating one text into 3 languages
 python deepl_quick.pyw --smoke
 ```
 
-38 offline checks (data files go to a temp directory, registry writes go to a scratch key; no network requests).
+47 offline checks (data files go to a temp directory, registry writes go to a scratch key; no network requests).
 
 ### License
 

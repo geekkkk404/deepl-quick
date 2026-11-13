@@ -4,6 +4,7 @@
 额度纪律：缓存优先（命中零调用）、默认手动触发（Ctrl+Enter）、456 额度耗尽绝不重试、429/529 退避重试。
 用法：双击运行；`python deepl_quick.pyw --smoke` 为自检模式（重定向数据文件到临时目录、不发网络请求）；
 `--minimized` 启动即缩成贴边药丸（开机自启命令自带此参数，开关在设置弹窗）。
+界面语言默认跟随 Windows 系统（可强制 中文/English，设置弹窗切换，即时生效）。
 """
 import ctypes
 import hashlib
@@ -21,7 +22,7 @@ import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import messagebox
 
-APP_VERSION = "0.2"
+APP_VERSION = "0.3"
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE = os.path.join(APP_DIR, "config.json")
@@ -49,20 +50,22 @@ CARD_BG = "#e8eaf0"
 ERR_FG = "#c0392b"
 OK_FG = "#27ae60"
 
-# 兜底目标语清单（动态拉取失败时使用；code 为 DeepL target 语言码，与 LANG_NAMES 覆盖一致）
+# 兜底目标语清单（动态拉取失败时使用；code 为 DeepL target 语言码。
+# 语言名用原生名——U-005 拍板：目标语名称是「内容」不是「界面」，原生名天然免翻译；
+# 动态拉取的清单里 DeepL 只给英文名，故 35 语兜底之外的新语种显示英文名）
 FALLBACK_LANGS = [
-    ("AR", "阿拉伯语"), ("BG", "保加利亚语"), ("CS", "捷克语"), ("DA", "丹麦语"),
-    ("DE", "德语"), ("EL", "希腊语"), ("EN-US", "英语（美）"), ("EN-GB", "英语（英）"),
-    ("ES", "西班牙语"), ("ET", "爱沙尼亚语"), ("FI", "芬兰语"), ("FR", "法语"),
-    ("HE", "希伯来语"), ("HU", "匈牙利语"), ("ID", "印尼语"), ("IT", "意大利语"),
-    ("JA", "日语"), ("KO", "韩语"), ("LT", "立陶宛语"), ("LV", "拉脱维亚语"),
-    ("NB", "挪威语"), ("NL", "荷兰语"), ("PL", "波兰语"), ("PT-BR", "葡语（巴西）"),
-    ("PT-PT", "葡语（欧）"), ("RO", "罗马尼亚语"), ("RU", "俄语"), ("SK", "斯洛伐克语"),
-    ("SL", "斯洛文尼亚语"), ("SV", "瑞典语"), ("TH", "泰语"), ("TR", "土耳其语"),
-    ("UK", "乌克兰语"), ("VI", "越南语"), ("ZH", "中文（简体）"),
+    ("AR", "العربية"), ("BG", "Български"), ("CS", "Čeština"), ("DA", "Dansk"),
+    ("DE", "Deutsch"), ("EL", "Ελληνικά"), ("EN-US", "English (US)"), ("EN-GB", "English (UK)"),
+    ("ES", "Español"), ("ET", "Eesti"), ("FI", "Suomi"), ("FR", "Français"),
+    ("HE", "עברית"), ("HU", "Magyar"), ("ID", "Bahasa Indonesia"), ("IT", "Italiano"),
+    ("JA", "日本語"), ("KO", "한국어"), ("LT", "Lietuvių"), ("LV", "Latviešu"),
+    ("NB", "Norsk bokmål"), ("NL", "Nederlands"), ("PL", "Polski"), ("PT-BR", "Português (BR)"),
+    ("PT-PT", "Português (PT)"), ("RO", "Română"), ("RU", "Русский"), ("SK", "Slovenčina"),
+    ("SL", "Slovenščina"), ("SV", "Svenska"), ("TH", "ไทย"), ("TR", "Türkçe"),
+    ("UK", "Українська"), ("VI", "Tiếng Việt"), ("ZH", "简体中文"),
 ]
 LANG_NAMES = dict(FALLBACK_LANGS)
-LANG_NAMES.update({"EN": "英语", "PT": "葡萄牙语", "ZH": "中文（简体）"})
+LANG_NAMES.update({"EN": "English", "PT": "Português", "ZH": "简体中文"})
 DEFAULT_TARGETS = ["EN-US", "JA", "ZH"]
 
 DEFAULT_CONFIG = {
@@ -74,7 +77,225 @@ DEFAULT_CONFIG = {
     "auto_translate": False,      # 输入防抖自动翻译（已确认默认关）
     "topmost": True,
     "host_mode": "auto",          # auto / free / pro
+    "ui_lang": "auto",            # auto / zh / en —— 界面语言（U-005；auto 跟随系统 UI 语言）
 }
+
+
+# ---------------------------------------------------------------- 界面文案 i18n（U-005 拍板方案 A：内嵌字符串表，单文件零依赖）
+
+STRINGS_ZH = {
+    # ---- 主窗
+    "status_ready": "就绪",
+    "app_ready_hint": "就绪——鼠标离开自动缩成贴边药丸，移上去展开；Ctrl+Enter 翻译",
+    "app_ready_nokey": "尚未设置 API Key：点标题栏「设」粘贴你的 DeepL key",
+    "btn_translate": "翻译（Ctrl+Enter）",
+    "btn_translating": "翻译中…",
+    "btn_clear": "清空",
+    "btn_copy_all": "复制全部",
+    "lbl_targets": "目标语言：",
+    "add_lang": "＋语言",
+    "card_pending": "待翻译",
+    "card_copy": "复制",
+    "card_cached": "缓存命中 · 零消耗",
+    "card_chars": "{n} 字符",
+    "card_failed": "失败",
+    "card_quota_out": "额度耗尽",
+    "done": "完成",
+    "status_copied": "已复制到剪贴板",
+    "status_translating_progress": "翻译中 {i}/{n} …",
+    "status_langs_refreshed": "语言清单已刷新：共 {n} 门",
+    "status_langs_fetching": "正在拉取语言清单…",
+    "status_langs_need_key": "先设置 key 才能拉取在线语言清单",
+    "status_langs_failed": "拉取失败：{e}",
+    "status_input_empty": "先输入要翻译的文本",
+    "status_need_key": "尚未设置 API Key：在设置里粘贴你的 DeepL key",
+    "status_need_target": "请先勾选至少一门目标语言",
+    "status_settings_saved": "设置已保存",
+    "status_ui_lang_switched": "设置已保存，界面语言已切换",
+    "status_autostart_fail": "已保存，但开机自启写入失败：{e}",
+    "status_key_deleted": "已删除本机 key",
+    "status_history_cleared": "历史记录已清空",
+    "status_cache_cleared": "翻译缓存已清空",
+    "usage_nokey": "未设置 key",
+    "hint_detected": "检测源语言：{lang}",
+    "hint_cache_all": "全部命中缓存，本次零消耗",
+    "hint_estimate": "预计消耗 ≈{total} 字符（{chars}×{langs} 语）",
+    # ---- 设置弹窗
+    "dlg_settings": "设置",
+    "settings_key_hint": "粘贴后点「保存设置」覆盖旧 key；点「删除 key」移除。key 只存本地 .deepl-key，绝不入库。",
+    "host_auto": "自动（按 :fx 后缀）",
+    "host_free": "免费档 api-free",
+    "host_pro": "付费 api.deepl",
+    "sec_behavior": "行为",
+    "sec_ui_lang": "界面语言",
+    "ui_auto": "自动（跟随系统）",
+    "chk_history": "保存历史记录（历史即翻译缓存）",
+    "chk_quality": "高质量模式（next-gen 模型，质量优先）",
+    "chk_auto": "输入停止后自动翻译（防抖 1.5s，默认关）",
+    "chk_topmost": "窗口置顶",
+    "chk_autostart": "开机自启（登录后缩成右缘药丸）",
+    "btn_save": "保存设置",
+    "btn_delete_key": "删除 key",
+    "btn_clear_history": "清空历史",
+    "btn_clear_cache": "清空缓存",
+    "btn_refresh_langs": "刷新语言清单",
+    "btn_close": "关闭",
+    "btn_ok": "确定",
+    # ---- 提示框
+    "mb_notice": "提示",
+    "mb_delete_key": "确定删除本机保存的 API key？（不影响你的 DeepL 账号，仅清掉本地 .deepl-key）",
+    "mb_clear_hist": "确定清空全部 {n} 条历史记录？（不影响翻译缓存）",
+    "mb_clear_cache": "确定清空翻译缓存？（缓存命中可省额度，清空后重复翻译将重新计费）",
+    "mb_targets_max": "常驻目标语最多 {n} 个（保持界面干净）",
+    # ---- 语言选择器
+    "dlg_picker": "选择常驻目标语言",
+    "lbl_search": "搜索：",
+    "lbl_selected": "已选 {n}/{max}（点列表行勾选/取消）",
+    # ---- 历史弹窗
+    "dlg_history": "历史记录（最近 {n} 条）",
+    "hist_disabled": "当前已关闭历史记录（设置里可开启）",
+    "hist_backfill": "双击条目回填原文",
+    # ---- key 掩码 / 用量 / 复制格式
+    "key_not_set": "未设置",
+    "key_set": "已设置（…{tail}）",
+    "usage_pct": "{c}/{l}（{p}%）",
+    "copy_all_line": "【{name}】{text}",
+    # ---- API 错误文案（classify_http_error / api_request）
+    "err_quota": "额度已用完（本月配额耗尽），下月再试或升级套餐——已停止本次任务",
+    "err_overload": "DeepL 过载/限流",
+    "err_auth": "key 无效或无权访问该接口（检查 .deepl-key 与 host 设置）",
+    "err_bad_request": "请求参数被拒绝：{msg}",
+    "err_too_large": "文本过大（单请求上限 128 KiB），请分段翻译",
+    "err_http": "HTTP {status}：{msg}",
+    "err_unknown": "未知错误",
+    "err_network": "网络错误（检查网络/代理，DeepL API 可能需代理访问）：{e}",
+}
+
+STRINGS_EN = {
+    # ---- main window
+    "status_ready": "Ready",
+    "app_ready_hint": "Ready — move away to snap into the edge pill, hover to expand; Ctrl+Enter translates",
+    "app_ready_nokey": "No API key yet: click 「设」 in the title bar and paste your DeepL key",
+    "btn_translate": "Translate (Ctrl+Enter)",
+    "btn_translating": "Translating…",
+    "btn_clear": "Clear",
+    "btn_copy_all": "Copy all",
+    "lbl_targets": "Targets:",
+    "add_lang": "＋ Add",
+    "card_pending": "Pending",
+    "card_copy": "Copy",
+    "card_cached": "cache hit · no cost",
+    "card_chars": "{n} chars",
+    "card_failed": "Failed",
+    "card_quota_out": "quota exhausted",
+    "done": "Done",
+    "status_copied": "Copied to clipboard",
+    "status_translating_progress": "Translating {i}/{n}…",
+    "status_langs_refreshed": "Language list refreshed: {n} languages",
+    "status_langs_fetching": "Fetching language list…",
+    "status_langs_need_key": "Set your key first to fetch the online language list",
+    "status_langs_failed": "Fetch failed: {e}",
+    "status_input_empty": "Enter text to translate first",
+    "status_need_key": "No API key yet: paste your DeepL key in Settings",
+    "status_need_target": "Pick at least one target language first",
+    "status_settings_saved": "Settings saved",
+    "status_ui_lang_switched": "Settings saved, UI language switched",
+    "status_autostart_fail": "Saved, but writing autostart failed: {e}",
+    "status_key_deleted": "Local key removed",
+    "status_history_cleared": "History cleared",
+    "status_cache_cleared": "Translation cache cleared",
+    "usage_nokey": "no key",
+    "hint_detected": "Detected source: {lang}",
+    "hint_cache_all": "All cached — this run costs nothing",
+    "hint_estimate": "≈{total} chars will be used ({chars}×{langs})",
+    # ---- settings dialog
+    "dlg_settings": "Settings",
+    "settings_key_hint": "Paste and click “Save” to replace the old key; “Delete key” removes it. The key is stored locally in .deepl-key only — never committed anywhere.",
+    "host_auto": "Auto (by :fx suffix)",
+    "host_free": "Free · api-free",
+    "host_pro": "Pro · api.deepl.com",
+    "sec_behavior": "Behavior",
+    "sec_ui_lang": "UI language",
+    "ui_auto": "Auto (follow system)",
+    "chk_history": "Save history (history doubles as the cache log)",
+    "chk_quality": "High-quality mode (next-gen model, quality first)",
+    "chk_auto": "Auto-translate after typing pauses (1.5 s debounce, off by default)",
+    "chk_topmost": "Keep window on top",
+    "chk_autostart": "Start with Windows (login shows the edge pill)",
+    "btn_save": "Save",
+    "btn_delete_key": "Delete key",
+    "btn_clear_history": "Clear history",
+    "btn_clear_cache": "Clear cache",
+    "btn_refresh_langs": "Refresh languages",
+    "btn_close": "Close",
+    "btn_ok": "OK",
+    # ---- message boxes
+    "mb_notice": "Notice",
+    "mb_delete_key": "Remove the API key stored on this machine? (Your DeepL account is untouched; only the local .deepl-key file is deleted.)",
+    "mb_clear_hist": "Clear all {n} history entries? (The translation cache is unaffected.)",
+    "mb_clear_cache": "Clear the translation cache? (Cache hits save quota; after clearing, repeat translations are billed again.)",
+    "mb_targets_max": "At most {n} pinned target languages (keeps the UI clean)",
+    # ---- language picker
+    "dlg_picker": "Choose pinned target languages",
+    "lbl_search": "Search:",
+    "lbl_selected": "Selected {n}/{max} (click a row to toggle)",
+    # ---- history dialog
+    "dlg_history": "History (last {n})",
+    "hist_disabled": "History is currently off (enable it in Settings)",
+    "hist_backfill": "Double-click an entry to refill the source text",
+    # ---- key mask / usage / copy format
+    "key_not_set": "not set",
+    "key_set": "set (…{tail})",
+    "usage_pct": "{c}/{l} ({p}%)",
+    "copy_all_line": "[{name}] {text}",
+    # ---- API error texts (classify_http_error / api_request)
+    "err_quota": "Quota used up (monthly limit exhausted) — retry next month or upgrade your plan. This run has been stopped.",
+    "err_overload": "DeepL overloaded / rate-limited",
+    "err_auth": "Invalid key or no access to this endpoint (check .deepl-key and the host setting)",
+    "err_bad_request": "Request rejected: {msg}",
+    "err_too_large": "Text too large (128 KiB per request) — split it into parts",
+    "err_http": "HTTP {status}: {msg}",
+    "err_unknown": "unknown error",
+    "err_network": "Network error (check network/proxy; the DeepL API may require a proxy): {e}",
+}
+
+_STRINGS = {"zh": STRINGS_ZH, "en": STRINGS_EN}
+_UI_LANG = "zh"                       # 运行期界面语言；App 启动时按 config + 系统解析（smoke 恒为 zh）
+
+
+def set_ui_lang(lang):
+    global _UI_LANG
+    _UI_LANG = lang if lang in _STRINGS else "zh"
+
+
+def tr(key, **kw):
+    """取界面文案：当前语言缺键回退中文，再缺回退 key 本身（键位齐全由 smoke 强制）。"""
+    s = _STRINGS.get(_UI_LANG, {}).get(key) or STRINGS_ZH.get(key) or key
+    return s.format(**kw) if kw else s
+
+
+def _locale_to_lang(name):
+    """locale 名 → zh / en / None（非 zh 开头一律 en；空名 None）。纯函数便于离线测试。"""
+    n = (name or "").lower()
+    return "zh" if n.startswith("zh") else ("en" if n else None)
+
+
+def detect_ui_lang():
+    """Windows 系统 UI 语言 → zh / en。探测失败兜底 zh（v0.2 前的唯一语言）。"""
+    try:
+        buf = ctypes.create_unicode_buffer(85)
+        if ctypes.windll.kernel32.GetUserDefaultLocaleName(buf, 85):
+            return _locale_to_lang(buf.value) or "zh"
+    except Exception:
+        pass
+    return "zh"
+
+
+def resolve_ui_lang(mode, detected=None):
+    """config 偏好 > 系统探测。detected 供 smoke 显式注入做纯函数测试。"""
+    if mode in _STRINGS:
+        return mode
+    return detected if detected in _STRINGS else detect_ui_lang()
 
 
 # ---------------------------------------------------------------- 数据层
@@ -172,9 +393,9 @@ def save_key(key):
 
 def key_masked(key):
     if not key:
-        return "未设置"
+        return tr("key_not_set")
     tail = key[-4:] if len(key) >= 4 else key
-    return f"已设置（…{tail}）"
+    return tr("key_set", tail=tail)
 
 
 # ---------------------------------------------------------------- 开机自启（U-004 拍板方案 A：注册表 HKCU Run 键）
@@ -254,12 +475,12 @@ def fmt_num(n):
 def fmt_usage(count, limit):
     if limit <= 0 or limit >= 10**11:      # 未设上限/成本控制时
         return f"{fmt_num(count)} / ∞"
-    return f"{fmt_num(count)}/{fmt_num(limit)}（{count * 100 // max(limit, 1)}%）"
+    return tr("usage_pct", c=fmt_num(count), l=fmt_num(limit), p=count * 100 // max(limit, 1))
 
 
 def format_copy_all(results):
     """results: [(code, text)] → 复制全部的统一格式"""
-    return "\n".join(f"【{lang_name(c)}】{t}" for c, t in results if t)
+    return "\n".join(tr("copy_all_line", name=lang_name(c), text=t) for c, t in results if t)
 
 
 # ---------------------------------------------------------------- API 层
@@ -288,23 +509,23 @@ class NetworkError(ApiError):
 
 
 def classify_http_error(status, body=""):
-    """HTTP 状态码 → (异常类, 中文提示)。纯函数，便于离线测试。"""
+    """HTTP 状态码 → (异常类, 本地化提示)。纯函数，便于离线测试。"""
     msg = ""
     try:
         msg = (json.loads(body) or {}).get("message", "") or (body or "")[:200]
     except Exception:
         msg = (body or "")[:200]
     if status == 456:
-        return QuotaError, "额度已用完（本月配额耗尽），下月再试或升级套餐——已停止本次任务"
+        return QuotaError, tr("err_quota")
     if status in (429, 529):
-        return ApiError, "DeepL 过载/限流"
+        return ApiError, tr("err_overload")
     if status in (401, 403):
-        return AuthError, "key 无效或无权访问该接口（检查 .deepl-key 与 host 设置）"
+        return AuthError, tr("err_auth")
     if status == 400:
-        return BadRequest, "请求参数被拒绝：" + (msg or "未知原因")
+        return BadRequest, tr("err_bad_request", msg=msg or tr("err_unknown"))
     if status == 413:
-        return BadRequest, "文本过大（单请求上限 128 KiB），请分段翻译"
-    return ApiError, f"HTTP {status}：{msg or '未知错误'}"
+        return BadRequest, tr("err_too_large")
+    return ApiError, tr("err_http", status=status, msg=msg or tr("err_unknown"))
 
 
 def build_url(host, path):
@@ -332,7 +553,7 @@ def api_request(key, host, method, path, payload=None):
         cls, msg = classify_http_error(e.code, body)
         raise cls(msg, status=e.code, trace_id=trace) from None
     except (urllib.error.URLError, TimeoutError, OSError) as e:
-        raise NetworkError(f"网络错误（检查网络/代理，DeepL API 可能需代理访问）：{e}") from None
+        raise NetworkError(tr("err_network", e=e)) from None
 
 
 def translate_text(key, host, text, target, model_type=None, request_fn=api_request):
@@ -346,8 +567,7 @@ def translate_text(key, host, text, target, model_type=None, request_fn=api_requ
             time.sleep(delay)
         try:
             resp = request_fn(key, host, "POST", "/v2/translate", payload)
-            tr = resp["translations"][0]
-            return tr
+            return resp["translations"][0]
         except ApiError as e:
             if e.status in (429, 529):
                 last = e
@@ -420,6 +640,7 @@ class App:
     def __init__(self, root):
         self.root = root
         self.cfg = load_config()
+        set_ui_lang(resolve_ui_lang(self.cfg.get("ui_lang", "auto")))   # 先定语言再建 UI（U-005）
         self.key = load_key()
         self.cache = load_cache()
         self.history = load_history()
@@ -452,8 +673,8 @@ class App:
         self.root.after(80, self._poll)
         self.root.after(400, self._auto_pill_poll)
         self._refresh_usage_async(force=True)
-        self.set_status("就绪——鼠标离开自动缩成贴边药丸，移上去展开；Ctrl+Enter 翻译" if self.key
-                        else "尚未设置 API Key：点标题栏「设」粘贴你的 DeepL key")
+        self.set_status(tr("app_ready_hint") if self.key
+                        else tr("app_ready_nokey"))
 
     # ---- 窗口骨架
 
@@ -502,20 +723,23 @@ class App:
         # 操作行
         bar = tk.Frame(self.root, bg=BG)
         bar.pack(fill="x", padx=12, pady=6)
-        self.btn_go = self._bar_btn(bar, "翻译（Ctrl+Enter）", self.translate_all, primary=True)
-        self._bar_btn(bar, "清空", self.clear_input)
-        self._bar_btn(bar, "复制全部", self.copy_all)
+        self.btn_go = self._bar_btn(bar, tr("btn_translate"), self.translate_all, primary=True)
+        self.btn_clear = self._bar_btn(bar, tr("btn_clear"), self.clear_input)
+        self.btn_copy_all = self._bar_btn(bar, tr("btn_copy_all"), self.copy_all)
         self.lbl_hint = tk.Label(bar, text="", bg=BG, fg="#8a94a0", font=(FONT, 9))
         self.lbl_hint.pack(side="right")
 
         # 常驻目标语 chips
         langbar = tk.Frame(self.root, bg=BG)
         langbar.pack(fill="x", padx=12)
-        tk.Label(langbar, text="目标语言：", bg=BG, fg="#666666", font=(FONT, 9)).pack(side="left")
+        self.lbl_targets_lbl = tk.Label(langbar, text=tr("lbl_targets"), bg=BG, fg="#666666",
+                                        font=(FONT, 9))
+        self.lbl_targets_lbl.pack(side="left")
         self.chipbox = tk.Frame(langbar, bg=BG)
         self.chipbox.pack(side="left")
-        add = tk.Label(langbar, text="＋语言", bg="#dfe3ea", fg=TITLE_BG, font=(FONT, 9),
+        add = tk.Label(langbar, text=tr("add_lang"), bg="#dfe3ea", fg=TITLE_BG, font=(FONT, 9),
                        padx=6, pady=2, cursor="hand2")
+        self.lbl_add = add
         add.pack(side="left")
         add.bind("<Button-1>", lambda e: self.open_picker())
 
@@ -526,7 +750,7 @@ class App:
         # 状态栏 + 右下角 resize 手柄
         statusbar = tk.Frame(self.root, bg=BG)
         statusbar.pack(fill="x", side="bottom")
-        self.lbl_status = tk.Label(statusbar, text="就绪", bg=BG, fg="#8a94a0",
+        self.lbl_status = tk.Label(statusbar, text=tr("status_ready"), bg=BG, fg="#8a94a0",
                                    font=(FONT, 9), anchor="w")
         self.lbl_status.pack(side="left", fill="x", expand=True, padx=(12, 0), pady=(2, 6))
         grip = tk.Label(statusbar, text="◢", bg=BG, fg="#b0b6bd", font=(FONT, 10),
@@ -724,9 +948,9 @@ class App:
             head.pack(fill="x")
             tk.Label(head, text=f"{lang_name(t)}  {t}", bg=CARD_BG, fg="#444444",
                      font=(FONT, 9, "bold")).pack(side="left", padx=(8, 0), pady=(4, 0))
-            st = tk.Label(head, text="待翻译", bg=CARD_BG, fg="#999999", font=(FONT, 8))
+            st = tk.Label(head, text=tr("card_pending"), bg=CARD_BG, fg="#999999", font=(FONT, 8))
             st.pack(side="left", padx=8)
-            cp = tk.Label(head, text="复制", bg=CARD_BG, fg=TITLE_BG, font=(FONT, 9),
+            cp = tk.Label(head, text=tr("card_copy"), bg=CARD_BG, fg=TITLE_BG, font=(FONT, 9),
                           cursor="hand2")
             cp.pack(side="right", padx=8, pady=(4, 0))
             txt = tk.Text(f, height=2, wrap="word", relief="flat", bg="white", fg="#333333",
@@ -767,8 +991,8 @@ class App:
             self.lbl_hint.configure(text="")
             return
         n = sum(1 for t in self.cfg["targets"] if cache_key(text, t, self._model_type()) not in self.cache)
-        self.lbl_hint.configure(text=f"预计消耗 ≈{len(text) * n} 字符（{len(text)}×{n} 语）"
-                                if n else "全部命中缓存，本次零消耗")
+        self.lbl_hint.configure(text=tr("hint_estimate", total=len(text) * n, chars=len(text), langs=n)
+                                if n else tr("hint_cache_all"))
 
     def _model_type(self):
         return "quality_optimized" if self.cfg.get("model_quality") else None
@@ -781,18 +1005,18 @@ class App:
             self._auto_after = None
         text = self.input.get("1.0", "end").strip()
         if not text:
-            self.set_status("先输入要翻译的文本", warn=True)
+            self.set_status(tr("status_input_empty"), warn=True)
             return
         if not self.key:
-            self.set_status("尚未设置 API Key：在设置里粘贴你的 DeepL key", err=True)
+            self.set_status(tr("status_need_key"), err=True)
             self.open_settings()
             return
         targets = list(self.cfg["targets"])
         if not targets:
-            self.set_status("请先勾选至少一门目标语言", warn=True)
+            self.set_status(tr("status_need_target"), warn=True)
             return
         self._busy = True
-        self.btn_go.configure(text="翻译中…", bg="#8a94a0")
+        self.btn_go.configure(text=tr("btn_translating"), bg="#8a94a0")
         for c in self.cards.values():
             self._set_card_status(c, "…", "#999999")
         threading.Thread(target=self._worker, args=(text, targets), daemon=True).start()
@@ -841,7 +1065,7 @@ class App:
                 msg = self.msgq.get_nowait()
                 kind = msg[0]
                 if kind == "progress":
-                    self.set_status(f"翻译中 {msg[1]}/{msg[2]} …")
+                    self.set_status(tr("status_translating_progress", i=msg[1], n=msg[2]))
                 elif kind == "card":
                     self._on_card_ok(*msg[1:])
                 elif kind == "card_err":
@@ -850,9 +1074,11 @@ class App:
                     self._on_quota(msg[1], msg[2])
                 elif kind == "usage":
                     self._on_usage(msg[1], msg[2])
+                elif kind == "status":           # 后台线程直投状态文案（语言清单拉取失败等，P-010 修复）
+                    self.set_status(msg[1], err=True)
                 elif kind == "langs":
                     self._langs_cache = msg[1]
-                    self.set_status(f"语言清单已刷新：共 {len(msg[1])} 门")
+                    self.set_status(tr("status_langs_refreshed", n=len(msg[1])))
                 elif kind == "done":
                     self._on_done()
         except queue.Empty:
@@ -872,15 +1098,16 @@ class App:
     def _on_card_ok(self, target, out, det, billed, cached):
         self._set_card_text(target, out)
         if cached:
-            self._set_card_status(self.cards[target], "缓存命中 · 零消耗", OK_FG)
+            self._set_card_status(self.cards[target], tr("card_cached"), OK_FG)
         else:
-            self._set_card_status(self.cards[target], f"{billed} 字符" if billed else "完成", "#999999")
+            self._set_card_status(self.cards[target], tr("card_chars", n=billed) if billed else tr("done"),
+                                  "#999999")
         if det:
-            self.lbl_hint.configure(text=f"检测源语言：{lang_name(det)}")
+            self.lbl_hint.configure(text=tr("hint_detected", lang=lang_name(det)))
         self.scroll.refresh()
 
     def _on_card_err(self, target, msg):
-        self._set_card_status(self.cards[target], "失败", ERR_FG)
+        self._set_card_status(self.cards[target], tr("card_failed"), ERR_FG)
         self._set_card_text(target, msg)
         self.scroll.refresh()
 
@@ -888,16 +1115,17 @@ class App:
         self.set_status(msg, err=True)
         for t, c in self.cards.items():
             if c["status"].cget("text") == "…":
-                self._set_card_status(c, "额度耗尽", ERR_FG)
+                self._set_card_status(c, tr("card_quota_out"), ERR_FG)
         self._on_done()
 
     def _on_done(self):
         if not self._busy:
             return
         self._busy = False
-        self.btn_go.configure(text="翻译（Ctrl+Enter）", bg=TITLE_BG)
-        if any(c["status"].cget("text") not in ("…", "待翻译") for c in self.cards.values()):
-            self.set_status("完成" if self.lbl_status.cget("text").startswith("翻译中") else
+        self.btn_go.configure(text=tr("btn_translate"), bg=TITLE_BG)
+        translating_prefix = tr("status_translating_progress").split("{")[0]
+        if any(c["status"].cget("text") not in ("…", tr("card_pending")) for c in self.cards.values()):
+            self.set_status(tr("done") if self.lbl_status.cget("text").startswith(translating_prefix) else
                             self.lbl_status.cget("text"))
         self._refresh_usage_async()
         self.scroll.refresh()
@@ -908,7 +1136,7 @@ class App:
             return
         self._last_usage_fetch = now
         if not self.key:
-            self.lbl_usage.configure(text="未设置 key")
+            self.lbl_usage.configure(text=tr("usage_nokey"))
             return
         key, host = self.key, pick_host(self.key, self.cfg.get("host_mode", "auto"))
 
@@ -943,7 +1171,7 @@ class App:
         self.root.clipboard_clear()
         self.root.clipboard_append(text)
         self.root.update()               # 确保进程内剪贴板即时对外生效
-        self.set_status("已复制到剪贴板")
+        self.set_status(tr("status_copied"))
 
     def copy_one(self, target):
         text = self.cards[target]["text"].get("1.0", "end-1c").strip()
@@ -976,11 +1204,14 @@ class App:
             return
         win = tk.Toplevel(self.root)
         self._settings = win
-        win.title("设置")
+        win.title(tr("dlg_settings"))
         win.configure(bg=BG)
         win.resizable(False, False)
         win.transient(self.root)
-        self._center(win, 500, 446)   # 500：六个 mini 按钮一行放得下——440 时「关闭」被 pack 挤成 1px（P-009）
+        # 500 宽：v0.3 起六个 mini 按钮改两行——英文文案更宽，单行会把「关闭」挤成 1px
+        #（P-009 同族，en 弹窗实测抓出；两行布局对任何语言都稳）。高度随「界面语言」区与两行按钮放大，
+        # 无头几何探针逐一断言过六按钮与三 radio
+        self._center(win, 500, 544)
 
         row = tk.Frame(win, bg=BG)
         row.pack(fill="x", padx=14, pady=(14, 4))
@@ -993,7 +1224,7 @@ class App:
                                 highlightthickness=1, highlightbackground="#d0d4d8",
                                 highlightcolor=TITLE_BG)
         self.ent_key.pack(fill="x", padx=14, pady=(2, 4))
-        tk.Label(win, text="粘贴后点「保存设置」覆盖旧 key；点「删除 key」移除。key 只存本地 .deepl-key，绝不入库。",
+        tk.Label(win, text=tr("settings_key_hint"),
                  bg=BG, fg="#999999", font=(FONT, 8), wraplength=466, justify="left"
                  ).pack(fill="x", padx=14)
 
@@ -1003,41 +1234,56 @@ class App:
         self.var_host = tk.StringVar(value=self.cfg.get("host_mode", "auto"))
         hrow = tk.Frame(win, bg=BG)
         hrow.pack(fill="x", padx=14)
-        for val, label in (("auto", "自动（按 :fx 后缀）"), ("free", "免费档 api-free"), ("pro", "付费 api.deepl")):
+        for val, label in (("auto", tr("host_auto")), ("free", tr("host_free")), ("pro", tr("host_pro"))):
             tk.Radiobutton(hrow, text=label, variable=self.var_host, value=val,
                            bg=BG, font=(FONT, 9)).pack(side="left", padx=(0, 10))
 
         hr2 = tk.Frame(win, bg=BG)
         hr2.pack(fill="x", padx=14, pady=(10, 0))
-        tk.Label(hr2, text="行为", bg=BG, fg="#333333", font=(FONT, 10, "bold")).pack(anchor="w")
+        tk.Label(hr2, text=tr("sec_behavior"), bg=BG, fg="#333333", font=(FONT, 10, "bold")).pack(anchor="w")
         self.var_hist = tk.BooleanVar(value=bool(self.cfg.get("save_history")))
         self.var_quality = tk.BooleanVar(value=bool(self.cfg.get("model_quality")))
         self.var_auto = tk.BooleanVar(value=bool(self.cfg.get("auto_translate")))
         self.var_top = tk.BooleanVar(value=bool(self.cfg.get("topmost")))
         self.var_autostart = tk.BooleanVar(value=autostart_enabled())  # 唯一事实源=注册表，不落 config.json
         for label, var, tip in (
-                ("保存历史记录（历史即翻译缓存）", self.var_hist, ""),
-                ("高质量模式（next-gen 模型，质量优先）", self.var_quality, ""),
-                ("输入停止后自动翻译（防抖 1.5s，默认关）", self.var_auto, ""),
-                ("窗口置顶", self.var_top, ""),
-                ("开机自启（登录后缩成右缘药丸）", self.var_autostart, "")):
+                (tr("chk_history"), self.var_hist, ""),
+                (tr("chk_quality"), self.var_quality, ""),
+                (tr("chk_auto"), self.var_auto, ""),
+                (tr("chk_topmost"), self.var_top, ""),
+                (tr("chk_autostart"), self.var_autostart, "")):
             tk.Checkbutton(win, text=label, variable=var, bg=BG, font=(FONT, 10),
                            anchor="w").pack(fill="x", padx=14)
 
+        hr3 = tk.Frame(win, bg=BG)
+        hr3.pack(fill="x", padx=14, pady=(10, 0))
+        tk.Label(hr3, text=tr("sec_ui_lang"), bg=BG, fg="#333333",
+                 font=(FONT, 10, "bold")).pack(anchor="w")
+        self.var_ui = tk.StringVar(value=self.cfg.get("ui_lang", "auto"))
+        urow = tk.Frame(win, bg=BG)
+        urow.pack(fill="x", padx=14)
+        for val, label in (("auto", tr("ui_auto")), ("zh", "中文"), ("en", "English")):
+            tk.Radiobutton(urow, text=label, variable=self.var_ui, value=val,
+                           bg=BG, font=(FONT, 9)).pack(side="left", padx=(0, 10))
+
         btns = tk.Frame(win, bg=BG)
         btns.pack(fill="x", padx=14, pady=(12, 14))
+        r1 = tk.Frame(btns, bg=BG)
+        r1.pack(fill="x")
+        r2 = tk.Frame(btns, bg=BG)
+        r2.pack(fill="x", pady=(6, 0))
 
-        def mini(text, cmd):
-            b = tk.Label(btns, text=text, bg="#e4e6e9", fg="#333333", font=(FONT, 9),
+        def mini(row, text, cmd):
+            b = tk.Label(row, text=text, bg="#e4e6e9", fg="#333333", font=(FONT, 9),
                          padx=10, pady=3, cursor="hand2")
             b.pack(side="left", padx=(0, 6))
             b.bind("<Button-1>", lambda e: cmd())
-        mini("保存设置", self._apply_settings)
-        mini("删除 key", self._delete_key)
-        mini("清空历史", self._clear_history)
-        mini("清空缓存", self._clear_cache)
-        mini("刷新语言清单", self._refresh_langs)
-        mini("关闭", win.destroy)
+        mini(r1, tr("btn_save"), self._apply_settings)          # 行 1：key 与写入类
+        mini(r1, tr("btn_delete_key"), self._delete_key)
+        mini(r1, tr("btn_close"), win.destroy)
+        mini(r2, tr("btn_clear_history"), self._clear_history)  # 行 2：数据操作类
+        mini(r2, tr("btn_clear_cache"), self._clear_cache)
+        mini(r2, tr("btn_refresh_langs"), self._refresh_langs)
 
     def _apply_settings(self):
         new_key = self.ent_key.get().strip()
@@ -1049,6 +1295,7 @@ class App:
         self.cfg["auto_translate"] = bool(self.var_auto.get())
         self.cfg["topmost"] = bool(self.var_top.get())
         self.cfg["host_mode"] = self.var_host.get()
+        self.cfg["ui_lang"] = self.var_ui.get()
         save_config_file(self.cfg)
         self.root.attributes("-topmost", bool(self.cfg["topmost"]))
         self._update_pin()
@@ -1058,44 +1305,58 @@ class App:
                 (autostart_enable if self.var_autostart.get() else autostart_disable)()
         except OSError as e:
             _as_err = e          # 留到弹窗关闭后统一报，免被「设置已保存」覆盖
+        new_lang = resolve_ui_lang(self.cfg.get("ui_lang", "auto"))
+        lang_switched = new_lang != _UI_LANG
+        if lang_switched:
+            set_ui_lang(new_lang)        # 立即生效：后续消息/新开弹窗用新语言，主窗静态文字同步刷新
+            self._retext_static()
         self.lbl_key_state.configure(text=key_masked(self.key))
         self._update_estimate()
         self._refresh_usage_async(force=True)
         if self._settings is not None and self._settings.winfo_exists():
             self._settings.destroy()
         if _as_err is None:
-            self.set_status("设置已保存")
+            self.set_status(tr("status_ui_lang_switched") if lang_switched else tr("status_settings_saved"))
         else:
-            self.set_status(f"已保存，但开机自启写入失败：{_as_err}", err=True)
+            self.set_status(tr("status_autostart_fail", e=_as_err), err=True)
+
+    def _retext_static(self):
+        """界面语言切换后即时刷新主窗静态文字（弹窗每次打开本来就会按当前语言重建）。"""
+        self.btn_go.configure(text=tr("btn_translate"))
+        self.btn_clear.configure(text=tr("btn_clear"))
+        self.btn_copy_all.configure(text=tr("btn_copy_all"))
+        self.lbl_targets_lbl.configure(text=tr("lbl_targets"))
+        self.lbl_add.configure(text=tr("add_lang"))
+        self.rebuild_cards()             # 卡片「待翻译/复制」等标签随语言刷新；译文正文不受影响
 
     def _delete_key(self):
-        if messagebox.askokcancel("删除 key", "确定删除本机保存的 API key？（不影响你的 DeepL 账号，仅清掉本地 .deepl-key）"):
+        if messagebox.askokcancel(tr("btn_delete_key"), tr("mb_delete_key")):
             self.key = None
             save_key(None)
             self.lbl_key_state.configure(text=key_masked(None))
-            self.lbl_usage.configure(text="未设置 key")
-            self.set_status("已删除本机 key")
+            self.lbl_usage.configure(text=tr("usage_nokey"))
+            self.set_status(tr("status_key_deleted"))
 
     def _clear_history(self):
-        if messagebox.askokcancel("清空历史", f"确定清空全部 {len(self.history)} 条历史记录？（不影响翻译缓存）"):
+        if messagebox.askokcancel(tr("btn_clear_history"), tr("mb_clear_hist", n=len(self.history))):
             self.history.clear()
             save_history_file(self.history)
             if self._history_win is not None and self._history_win.winfo_exists():
                 self._history_win.destroy()
-            self.set_status("历史记录已清空")
+            self.set_status(tr("status_history_cleared"))
 
     def _clear_cache(self):
-        if messagebox.askokcancel("清空缓存", "确定清空翻译缓存？（缓存命中可省额度，清空后重复翻译将重新计费）"):
+        if messagebox.askokcancel(tr("btn_clear_cache"), tr("mb_clear_cache")):
             self.cache.clear()
             save_cache_file(self.cache)
             self._update_estimate()
-            self.set_status("翻译缓存已清空")
+            self.set_status(tr("status_cache_cleared"))
 
     def _refresh_langs(self):
         if not self.key:
-            self.set_status("先设置 key 才能拉取在线语言清单", warn=True)
+            self.set_status(tr("status_langs_need_key"), warn=True)
             return
-        self.set_status("正在拉取语言清单…")
+        self.set_status(tr("status_langs_fetching"))
         key, host = self.key, pick_host(self.key, self.cfg.get("host_mode", "auto"))
 
         def run():
@@ -1103,7 +1364,7 @@ class App:
                 langs = fetch_target_languages(key, host)
                 self.msgq.put(("langs", langs))
             except ApiError as e:
-                self.msgq.put(("status", f"拉取失败：{e}"))
+                self.msgq.put(("status", tr("status_langs_failed", e=e)))
         threading.Thread(target=run, daemon=True).start()
 
     # ---- 语言选择器
@@ -1119,7 +1380,7 @@ class App:
             return
         win = tk.Toplevel(self.root)
         self._picker = win
-        win.title("选择常驻目标语言")
+        win.title(tr("dlg_picker"))
         win.configure(bg=BG)
         win.transient(self.root)
         self._center(win, 380, 460)
@@ -1127,11 +1388,11 @@ class App:
 
         top = tk.Frame(win, bg=BG)
         top.pack(fill="x", padx=12, pady=(12, 4))
-        tk.Label(top, text="搜索：", bg=BG, fg="#666666", font=(FONT, 9)).pack(side="left")
+        tk.Label(top, text=tr("lbl_search"), bg=BG, fg="#666666", font=(FONT, 9)).pack(side="left")
         ent = tk.Entry(top, font=(FONT, 10), relief="flat", highlightthickness=1,
                        highlightbackground="#d0d4d8", highlightcolor=TITLE_BG)
         ent.pack(side="left", fill="x", expand=True)
-        tk.Label(win, text=f"已选 {len(draft)}/{TARGETS_MAX}（点列表行勾选/取消）",
+        tk.Label(win, text=tr("lbl_selected", n=len(draft), max=TARGETS_MAX),
                  bg=BG, fg="#999999", font=(FONT, 8), anchor="w").pack(fill="x", padx=12)
         lbl_count = win.winfo_children()[-1]
 
@@ -1161,10 +1422,10 @@ class App:
                 del draft[code]
             else:
                 if len(draft) >= TARGETS_MAX:
-                    messagebox.showinfo("提示", f"常驻目标语最多 {TARGETS_MAX} 个（保持界面干净）", parent=win)
+                    messagebox.showinfo(tr("mb_notice"), tr("mb_targets_max", n=TARGETS_MAX), parent=win)
                     return
                 draft[code] = name
-            lbl_count.configure(text=f"已选 {len(draft)}/{TARGETS_MAX}（点列表行勾选/取消）")
+            lbl_count.configure(text=tr("lbl_selected", n=len(draft), max=TARGETS_MAX))
             redraw()
 
         def apply():
@@ -1182,7 +1443,7 @@ class App:
         ent.bind("<KeyRelease>", lambda e: redraw(ent.get()))
         btns = tk.Frame(win, bg=BG)
         btns.pack(fill="x", padx=12, pady=(4, 12))
-        ok = tk.Label(btns, text="确定", bg=TITLE_BG, fg="white", font=(FONT, 10),
+        ok = tk.Label(btns, text=tr("btn_ok"), bg=TITLE_BG, fg="white", font=(FONT, 10),
                       padx=16, pady=3, cursor="hand2")
         ok.pack(side="right")
         ok.bind("<Button-1>", lambda e: apply())
@@ -1199,12 +1460,12 @@ class App:
             return
         win = tk.Toplevel(self.root)
         self._history_win = win
-        win.title(f"历史记录（最近 {min(len(self.history), 200)} 条）")
+        win.title(tr("dlg_history", n=min(len(self.history), 200)))
         win.configure(bg=BG)
         win.transient(self.root)
         self._center(win, 520, 420)
         if not self.cfg.get("save_history"):
-            tk.Label(win, text="当前已关闭历史记录（设置里可开启）", bg=BG, fg="#999999",
+            tk.Label(win, text=tr("hist_disabled"), bg=BG, fg="#999999",
                      font=(FONT, 9)).pack(fill="x", padx=12, pady=(10, 0))
         data = list(reversed(self.history[-200:]))
         lb = tk.Listbox(win, font=(FONT, 9), relief="flat", bg="white",
@@ -1227,18 +1488,18 @@ class App:
         lb.bind("<Double-Button-1>", backfill)
         bar = tk.Frame(win, bg=BG)
         bar.pack(fill="x", padx=12, pady=(0, 12))
-        tk.Label(bar, text="双击条目回填原文", bg=BG, fg="#999999", font=(FONT, 8)).pack(side="left")
-        clr = tk.Label(bar, text="清空历史", bg="#e4e6e9", fg=ERR_FG, font=(FONT, 9),
+        tk.Label(bar, text=tr("hist_backfill"), bg=BG, fg="#999999", font=(FONT, 8)).pack(side="left")
+        clr = tk.Label(bar, text=tr("btn_clear_history"), bg="#e4e6e9", fg=ERR_FG, font=(FONT, 9),
                        padx=10, pady=2, cursor="hand2")
         clr.pack(side="right")
         clr.bind("<Button-1>", lambda e: (self._clear_history_with_win(win)))
 
     def _clear_history_with_win(self, win):
-        if messagebox.askokcancel("清空历史", f"确定清空全部 {len(self.history)} 条历史记录？"):
+        if messagebox.askokcancel(tr("btn_clear_history"), tr("mb_clear_hist", n=len(self.history))):
             self.history.clear()
             save_history_file(self.history)
             win.destroy()
-            self.set_status("历史记录已清空")
+            self.set_status(tr("status_history_cleared"))
 
     # ---- 杂项
 
@@ -1357,8 +1618,8 @@ def run_smoke():
         if len(calls) < 3:
             raise ApiError("过载", status=429)
         return {"translations": [{"text": "你好", "detected_source_language": "EN", "billed_characters": 5}]}
-    tr = translate_text("k", HOST_FREE, "hello", "ZH", request_fn=flaky)
-    check("retry 429 then ok", len(calls) == 3 and tr["text"] == "你好")
+    res = translate_text("k", HOST_FREE, "hello", "ZH", request_fn=flaky)
+    check("retry 429 then ok", len(calls) == 3 and res["text"] == "你好")
 
     calls2 = []
 
@@ -1381,9 +1642,9 @@ def run_smoke():
     check("payload discipline", seen.get("model_type") == "quality_optimized" and
           seen.get("target_lang") == "ZH" and seen.get("show_billed_characters") is True)
 
-    # 10 复制全部格式
+    # 10 复制全部格式（语言名已原生化——U-005）
     check("copy all fmt", format_copy_all([("JA", "こんにちは"), ("ZH", ""), ("DE", "Hallo")]) ==
-          "【日语】こんにちは\n【德语】Hallo")
+          "【日本語】こんにちは\n【Deutsch】Hallo")
 
     # 11 usage 格式
     check("usage fmt", fmt_usage(500000, 500000).startswith("500.0k/500.0k") or "%" in fmt_usage(500000, 500000))
@@ -1442,6 +1703,28 @@ def run_smoke():
     mname = f"deepl_quick_smoke_{os.getpid()}"
     check("single instance first", acquire_single_instance(mname) is True)
     check("single instance second", acquire_single_instance(mname) is False)
+
+    # 17 界面 i18n（U-005 方案 A）：双语键位齐全 / 回退链 / 探测解析 / 原生语言名
+    check("i18n key parity", set(STRINGS_ZH) == set(STRINGS_EN))
+    check("i18n values nonempty", all(str(v).strip() for v in
+                                      list(STRINGS_ZH.values()) + list(STRINGS_EN.values())))
+    check("i18n tr fallback", tr("__nope__") == "__nope__")
+    check("i18n tr format", tr("card_chars", n=5) == STRINGS_ZH["card_chars"].format(n=5))
+    set_ui_lang("en")
+    check("i18n en switch", tr("btn_copy_all") == STRINGS_EN["btn_copy_all"]
+          and tr("card_cached") == STRINGS_EN["card_cached"]
+          and tr("status_langs_refreshed", n=111) == STRINGS_EN["status_langs_refreshed"].format(n=111))
+    set_ui_lang("zh")
+    check("ui lang resolve", resolve_ui_lang("auto", "zh") == "zh"
+          and resolve_ui_lang("auto", "en") == "en"
+          and resolve_ui_lang("zh") == "zh" and resolve_ui_lang("en") == "en"
+          and resolve_ui_lang("auto") in ("zh", "en")            # detected 缺席时走系统探测
+          and resolve_ui_lang("bogus", "en") == "en")            # 非法 config 值按 auto 处理
+    check("locale mapping", _locale_to_lang("zh-CN") == "zh" and _locale_to_lang("en-US") == "en"
+          and _locale_to_lang("de-DE") == "en" and _locale_to_lang("") is None)
+    check("native lang names", lang_name("JA") == "日本語" and lang_name("DE") == "Deutsch"
+          and lang_name("EN-US").startswith("English") and lang_name("ZH") == "简体中文")
+    check("default ui_lang auto", load_config()["ui_lang"] == "auto")
 
     passed = sum(1 for _n, ok in results if ok)
     for name, ok in results:
