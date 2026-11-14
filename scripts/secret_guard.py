@@ -47,6 +47,9 @@ def scan(zip_path: Path) -> list[str]:
 
 
 def main() -> None:
+    # CI 管道 stdout 用 locale 编码（GitHub Windows runner = cp1252），中文消息必崩——强制 UTF-8
+    for s in (sys.stdout, sys.stderr):
+        s.reconfigure(encoding="utf-8", errors="replace")
     target = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("dist")
     zips = sorted(target.glob("*.zip")) if target.is_dir() else [target]
     if not zips:
