@@ -3,6 +3,15 @@
 All notable changes to deepl-quick are documented here.
 本文件记录 deepl-quick 的全部重要变更。
 
+## v0.3.1 — 2026-11-14
+
+- Fixed: the per-language **Copy** button on result cards had been invisible since v0.1 — the scroll container never synced its content width to the viewport, pushing the button past the visible area (measured ~133px out).
+  修复：结果卡片的逐语种「复制」按钮自 v0.1 起从未显示——滚动容器未把内容宽度同步到视口，按钮被整体裁出可视区（实测超出约 133px）。
+- The per-language copy entry is now styled as an actual button (white with border), clearly visible on every card.
+  逐语种「复制」入口按钮化（白底描边），每张卡片上一眼可见。
+- Scroll container now keeps its content width in sync with the viewport; the language picker benefits as well.
+  滚动容器内容宽度与视口保持同步；语言选择器弹窗同享此修复。
+
 ## v0.3 — 2026-11-13
 
 - Multilingual UI (Chinese / English): follows the system language, switchable in Settings, applies instantly — no restart needed.

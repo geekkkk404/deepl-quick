@@ -22,7 +22,7 @@ import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import messagebox
 
-APP_VERSION = "0.3"
+APP_VERSION = "0.3.1"
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE = os.path.join(APP_DIR, "config.json")
@@ -624,6 +624,8 @@ class ScrollFrame(tk.Frame):
         self.inner = tk.Frame(self.canvas, bg=bg)
         self._win = self.canvas.create_window((0, 0), window=self.inner, anchor="nw")
         self.inner.bind("<Configure>", lambda e: self.refresh())
+        self.canvas.bind("<Configure>",
+                         lambda e: self.canvas.itemconfigure(self._win, width=e.width))
         self.canvas.bind("<Enter>", lambda e: self.canvas.bind_all("<MouseWheel>", self._wheel))
         self.canvas.bind("<Leave>", lambda e: self.canvas.unbind_all("<MouseWheel>"))
 
@@ -950,8 +952,8 @@ class App:
                      font=(FONT, 9, "bold")).pack(side="left", padx=(8, 0), pady=(4, 0))
             st = tk.Label(head, text=tr("card_pending"), bg=CARD_BG, fg="#999999", font=(FONT, 8))
             st.pack(side="left", padx=8)
-            cp = tk.Label(head, text=tr("card_copy"), bg=CARD_BG, fg=TITLE_BG, font=(FONT, 9),
-                          cursor="hand2")
+            cp = tk.Label(head, text=tr("card_copy"), bg="#ffffff", fg=TITLE_BG, font=(FONT, 9),
+                          relief="raised", borderwidth=1, padx=8, pady=2, cursor="hand2")
             cp.pack(side="right", padx=8, pady=(4, 0))
             txt = tk.Text(f, height=2, wrap="word", relief="flat", bg="white", fg="#333333",
                           font=(FONT, 10), state="disabled", highlightthickness=0)
