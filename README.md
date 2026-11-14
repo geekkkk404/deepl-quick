@@ -4,12 +4,13 @@
 > A tiny pill that sits quietly at the edge of your screen — a DeepL-powered translator widget for Windows. Pure tkinter, zero dependencies, fully local.
 
 <p align="center">
-  <img src="assets/hero.png" alt="deepl-quick 主界面" width="560">
+  <img src="assets/demo_en.gif" alt="deepl-quick demo / 演示" width="480">
 </p>
 <p align="center">
-  平时缩成一枚胶囊：&nbsp;
-  <img src="assets/pill.png" alt="贴边药丸" width="60">
+  平时缩成一枚胶囊&nbsp;<img src="assets/pill.png" alt="pill" width="39">&nbsp;，悬停即展开 —— 看不懂 → 拿走译文，呼吸之间
 </p>
+
+![version](https://img.shields.io/badge/version-v0.3-2f3640) ![python](https://img.shields.io/badge/Python-3.8%2B-306998) ![platform](https://img.shields.io/badge/Windows-10%20%2F%2011-0078d4) ![license](https://img.shields.io/badge/License-MIT-27ae60) ![selftest](https://img.shields.io/badge/self--test-47%20passing-27ae60)
 
 当前版本：**v0.3** ・ License：[MIT](LICENSE)
 
@@ -25,6 +26,10 @@
 
 同门项目：[QuadTodo](https://github.com/geekkkk404/quad-todo)（四象限待办小窗）—— 同一套「单文件、零依赖、纯本地」的打法。
 
+<p align="center">
+  <img src="assets/hero_zh.png" alt="deepl-quick 中文界面" width="520">
+</p>
+
 ### 特性
 
 - **贴边药丸常驻**：鼠标离开约 0.75s 自动折叠成 39×30 胶囊，悬停展开、静止不弹跳、拖动中不折叠；窗口位置与药丸位置均有记忆
@@ -37,6 +42,10 @@
 - **本地翻译历史**：可在设置中关闭或一键清空；双击历史条目回填原文
 - **高质量模式**：可选 DeepL 下一代模型（`quality_optimized`），不额外消耗额度
 - **纯本地、零依赖**：密钥、历史、缓存全部只存本机；Python 3.8+ 标准库即可运行（tkinter + urllib），空闲内存 ~30 MB
+
+### 下载
+
+绿色免安装包制作中（打包发版链筹备中），完成后将挂在 [Releases](https://github.com/geekkkk404/deepl-quick/releases)。当前请从源码运行：装好 Python 3.8+，下载本仓库，双击 `deepl_quick.pyw` 即可（见下）。
 
 ### 快速开始
 
@@ -58,6 +67,10 @@
 | 折叠 / 展开 | 标题栏「—」；或鼠标离开 / 悬停自动 |
 | 拖动 / 调整大小 | 拖标题栏；右下角「◢」 |
 | 置顶开关 | 标题栏「钉」（绿=开） |
+
+<p align="center">
+  <img src="assets/settings_zh.png" alt="设置弹窗" width="500">
+</p>
 
 ### 隐私
 
@@ -98,6 +111,10 @@ python deepl_quick.pyw --smoke
 
 Sibling project: [QuadTodo](https://github.com/geekkkk404/quad-todo) — same single-file, zero-dependency, fully-local philosophy.
 
+<p align="center">
+  <img src="assets/hero_en.png" alt="deepl-quick main window" width="520">
+</p>
+
 ### Features
 
 - **Edge pill, always resident** — auto-collapses (~0.75s) to a 39×30 pill when the mouse leaves; hover to expand; no bounce while idle, no collapse while dragging; both window and pill positions are remembered
@@ -111,12 +128,20 @@ Sibling project: [QuadTodo](https://github.com/geekkkk404/quad-todo) — same si
 - **High-quality mode** — optionally uses DeepL's next-gen model (`quality_optimized`) at no extra quota cost
 - **Fully local, zero dependencies** — key, history and cache never leave your machine; runs on the Python 3.8+ standard library only (tkinter + urllib); ~30 MB idle memory
 
+### Download
+
+A portable no-install package is in the works; once ready it will be attached to [Releases](https://github.com/geekkkk404/deepl-quick/releases). For now, run from source: install Python 3.8+, grab this repo, and double-click `deepl_quick.pyw` (see below).
+
 ### Getting started
 
 1. **Get a DeepL API key**: sign up for the free Developer plan at [deepl.com/pro#api](https://www.deepl.com/pro#api) (new accounts include a one-time 1,000,000-character quota; legacy API Free subscriptions get 500,000 characters per month). Create and copy a key.
 2. **Run**: double-click `deepl_quick.pyw` (requires Python 3.8+; nothing to pip-install).
 3. **Paste the key**: click 「设」 in the title bar on first launch, paste, save. The key is stored only in the local `.deepl-key` file next to the script.
 4. Hover the pill to expand, type, press `Ctrl+Enter`.
+
+<p align="center">
+  <img src="assets/settings_en.png" alt="Settings dialog" width="500">
+</p>
 
 ### Privacy
 
