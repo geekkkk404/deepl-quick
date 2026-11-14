@@ -1,0 +1,13 @@
+deepl-quick 绿色免安装版使用说明
+================================
+
+1. 把整个文件夹解压到任意目录（建议普通目录，如 D:\deepl-quick，不要放 C:\Program Files）。
+2. 双击 deepl-quick.bat 启动：屏幕右缘出现一枚「译」胶囊，悬停即展开。无需安装任何东西，包内自带运行时。
+3. 首次使用：点标题栏「设」粘贴你的 DeepL API key（免费档在 DeepL 官网注册 Developer 计划即可获取）。
+4. 输入文本 Ctrl+Enter 翻译，自动检测源语言，勾选的常驻目标语一键复制。翻译文本会发送给 DeepL 官方 API；
+   key、历史、缓存只存在本机文件夹里，无任何遥测。
+5. 开机自启为程序内置：标题栏「设」→ 勾选「开机自启」即可（免管理员）；任务管理器「启动应用」可随时停用。
+6. 升级：下载新版压缩包解压后，把旧文件夹里的数据文件（config.json / cache.json / history.json / .deepl-key）
+   复制到新文件夹，即可保留全部配置与缓存。
+
+问题反馈：https://github.com/geekkkk404/deepl-quick/issues

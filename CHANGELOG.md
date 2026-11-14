@@ -11,6 +11,8 @@ All notable changes to deepl-quick are documented here.
   目标语言清单改用原生名显示（Deutsch / 日本語 / Français…）。
 - Language list refresh verified against the live API: 111 target languages.
   语言清单在线刷新实测：111 门目标语言。
+- Windows portable package (bundled Python runtime) attached to this release.
+  本发行版附带 Windows 绿色免安装包（内嵌 Python 运行时）。
 - Fixed: Settings dialog buttons could be squeezed invisible under the EN locale; a status-bar message was silently dropped on language-fetch failure.
   修复：英文界面下设置弹窗按钮可能被挤成不可见；语言清单拉取失败时状态栏消息被静默丢弃。
 

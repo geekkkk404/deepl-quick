@@ -45,7 +45,7 @@
 
 ### 下载
 
-绿色免安装包制作中（打包发版链筹备中），完成后将挂在 [Releases](https://github.com/geekkkk404/deepl-quick/releases)。当前请从源码运行：装好 Python 3.8+，下载本仓库，双击 `deepl_quick.pyw` 即可（见下）。
+**绿色免安装包已就绪**：到 [Releases](https://github.com/geekkkk404/deepl-quick/releases) 下载 `deepl-quick-v0.3-win64-portable.zip`，解压后双击 `deepl-quick.bat` 即可——包内自带 Python 运行时，无需安装任何东西。也可从源码运行：装好 Python 3.8+，下载本仓库，双击 `deepl_quick.pyw`（见下）。
 
 ### 快速开始
 
@@ -130,7 +130,7 @@ Sibling project: [QuadTodo](https://github.com/geekkkk404/quad-todo) — same si
 
 ### Download
 
-A portable no-install package is in the works; once ready it will be attached to [Releases](https://github.com/geekkkk404/deepl-quick/releases). For now, run from source: install Python 3.8+, grab this repo, and double-click `deepl_quick.pyw` (see below).
+**A portable no-install package is ready**: download `deepl-quick-v0.3-win64-portable.zip` from [Releases](https://github.com/geekkkk404/deepl-quick/releases), extract, and double-click `deepl-quick.bat` — the Python runtime is bundled, nothing to install. Or run from source: install Python 3.8+, grab this repo, and double-click `deepl_quick.pyw` (see below).
 
 ### Getting started
 

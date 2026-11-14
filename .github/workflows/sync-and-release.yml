@@ -1,0 +1,102 @@
+name: sync-and-release
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+  schedule:
+    - cron: "47 20 * * 1" # UTC 每周一 20:47（北京时间周二 04:47）兜底，避开整点拥塞
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-and-release
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 完整历史与标签，镜像需要全部 refs
+
+      - name: Mirror push to Gitee
+        env:
+          TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: |
+          R="https://geekkkk404:${TOKEN}@gitee.com/geekkkk404/deepl-quick.git"
+          # 用 origin/main 引用而非本地分支名，保证 tag 触发（detached HEAD）时同样可用。
+          # 一次 git push main+tag 会同时触发两个 run：并行镜像曾把 Gitee 授权服务打到 408
+          # （QuadTodo v0.3 发版 2026-10-30 双双失败），除 workflow 级串行化外此处再加重试兜底。
+          for i in 1 2 3 4; do
+            if git push --force "$R" "origin/main:refs/heads/main" \
+               && git push --force "$R" "+refs/tags/*:refs/tags/*"; then
+              exit 0
+            fi
+            echo "mirror push 第 $i 次失败，30 秒后重试…"
+            sleep 30
+          done
+          exit 1
+
+  build-portable:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: sync
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Download matching embeddable Python
+        shell: pwsh
+        run: |
+          $v = (python -c "import platform;print(platform.python_version())").Trim()
+          Invoke-WebRequest "https://www.python.org/ftp/python/$v/python-$v-embed-amd64.zip" -OutFile embed.zip
+
+      - name: Build portable zip
+        run: python scripts/build_portable.py --embeddable-zip embed.zip
+
+      - name: Secret-guard the zip
+        run: python scripts/secret_guard.py dist
+
+      - name: Write release notes
+        run: python scripts/make_notes.py "${{ github.ref_name }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-files
+          path: dist/*
+
+      - name: Create GitHub release & upload zip
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $zip = (Get-ChildItem dist -Filter *.zip | Select-Object -First 1).FullName
+          gh release create "${{ github.ref_name }}" "$zip" --title "deepl-quick ${{ github.ref_name }}" --notes-file dist/RELEASE.md
+          if ($LASTEXITCODE -ne 0) { gh release upload "${{ github.ref_name }}" "$zip" --clobber }
+
+  gitee-release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [sync, build-portable]
+    runs-on: ubuntu-latest
+    # 只创建发行版+说明。实测 GitHub 机房到 Gitee 的大文件 POST/git push 全部超时，
+    # 附件由维护者在本地网络执行 scripts/upload-gitee-release.ps1 补传（见 README）。
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-files
+          path: dist
+
+      - name: Create Gitee release with notes
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: |
+          python scripts/gitee_release.py "${{ github.ref_name }}" "" dist/RELEASE.md
