@@ -22,7 +22,7 @@ import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import messagebox
 
-APP_VERSION = "0.3.1"
+APP_VERSION = "0.3.2"
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE = os.path.join(APP_DIR, "config.json")
@@ -37,7 +37,7 @@ RETRY_DELAYS = (1, 2)                      # 429/529 退避重试间隔（秒）
 CACHE_MAX = 3000
 HISTORY_MAX = 500
 AUTO_DELAY_MS = 1500                       # 防抖自动翻译：输入停止后延迟
-TARGETS_MAX = 8                            # 常驻目标语上限（保持前端干净）
+TARGETS_MAX = 16                           # 常驻目标语上限（防卡片列表失控；P-015 拍板放宽）
 RUN_KEY_PATH = r"Software\Microsoft\Windows\CurrentVersion\Run"  # 开机自启落点（HKCU，免管理员）
 AUTOSTART_NAME = "deepl-quick"             # Run 键值名（任务管理器「启动应用」页显示这个名字）
 
@@ -92,10 +92,8 @@ STRINGS_ZH = {
     "btn_translating": "翻译中…",
     "btn_clear": "清空",
     "btn_copy_all": "复制全部",
-    "lbl_targets": "目标语言：",
     "add_lang": "＋语言",
     "card_pending": "待翻译",
-    "card_copy": "复制",
     "card_cached": "缓存命中 · 零消耗",
     "card_chars": "{n} 字符",
     "card_failed": "失败",
@@ -180,10 +178,8 @@ STRINGS_EN = {
     "btn_translating": "Translating…",
     "btn_clear": "Clear",
     "btn_copy_all": "Copy all",
-    "lbl_targets": "Targets:",
     "add_lang": "＋ Add",
     "card_pending": "Pending",
-    "card_copy": "Copy",
     "card_cached": "cache hit · no cost",
     "card_chars": "{n} chars",
     "card_failed": "Failed",
@@ -670,7 +666,6 @@ class App:
         self._build_ui()
         self._restore_window()
         self.root.attributes("-topmost", bool(self.cfg.get("topmost")))
-        self.rebuild_chips()
         self.rebuild_cards()
         self.root.after(80, self._poll)
         self.root.after(400, self._auto_pill_poll)
@@ -731,14 +726,9 @@ class App:
         self.lbl_hint = tk.Label(bar, text="", bg=BG, fg="#8a94a0", font=(FONT, 9))
         self.lbl_hint.pack(side="right")
 
-        # 常驻目标语 chips
+        # 目标语管理入口：卡片列表本身即语言清单，这里只留 ＋语言（P-015 拍板，chips 退役）
         langbar = tk.Frame(self.root, bg=BG)
         langbar.pack(fill="x", padx=12)
-        self.lbl_targets_lbl = tk.Label(langbar, text=tr("lbl_targets"), bg=BG, fg="#666666",
-                                        font=(FONT, 9))
-        self.lbl_targets_lbl.pack(side="left")
-        self.chipbox = tk.Frame(langbar, bg=BG)
-        self.chipbox.pack(side="left")
         add = tk.Label(langbar, text=tr("add_lang"), bg="#dfe3ea", fg=TITLE_BG, font=(FONT, 9),
                        padx=6, pady=2, cursor="hand2")
         self.lbl_add = add
@@ -928,16 +918,7 @@ class App:
         if self._pill_mode and not self._pressing and (px, py) != self._still:
             self._exit_pill()
 
-    # ---- chips 与结果卡片
-
-    def rebuild_chips(self):
-        for w in self.chipbox.winfo_children():
-            w.destroy()
-        for t in self.cfg["targets"]:
-            chip = tk.Label(self.chipbox, text=f" {lang_name(t)} ×", bg="#dfe3ea", fg="#444444",
-                            font=(FONT, 9), padx=6, pady=2, cursor="hand2")
-            chip.pack(side="left", padx=(0, 4))
-            chip.bind("<Button-1>", lambda e, t=t: self.remove_target(t))
+    # ---- 结果卡片
 
     def rebuild_cards(self):
         for c in self.cards.values():
@@ -952,14 +933,20 @@ class App:
                      font=(FONT, 9, "bold")).pack(side="left", padx=(8, 0), pady=(4, 0))
             st = tk.Label(head, text=tr("card_pending"), bg=CARD_BG, fg="#999999", font=(FONT, 8))
             st.pack(side="left", padx=8)
-            cp = tk.Label(head, text=tr("card_copy"), bg="#ffffff", fg=TITLE_BG, font=(FONT, 9),
-                          relief="raised", borderwidth=1, padx=8, pady=2, cursor="hand2")
-            cp.pack(side="right", padx=8, pady=(4, 0))
+            # 头部右缘：「×」移除该目标语（P-015 拍板，接替退役的 chips ×）＋ 复制图标 ⧉。
+            # 图标字形雅黑没有，显式用 Segoe UI Symbol（Tk 无字体回退）。
+            rm = tk.Label(head, text="×", bg="#ffffff", fg="#b05252", font=(FONT, 10, "bold"),
+                          relief="raised", borderwidth=1, padx=6, pady=2, cursor="hand2")
+            rm.pack(side="right", padx=(0, 8), pady=(4, 0))
+            rm.bind("<Button-1>", lambda e, t=t: self.remove_target(t))
+            cp = tk.Label(head, text="⧉", bg="#ffffff", fg=TITLE_BG, font=("Segoe UI Symbol", 10),
+                          relief="raised", borderwidth=1, padx=7, pady=2, cursor="hand2")
+            cp.pack(side="right", padx=(0, 4), pady=(4, 0))
+            cp.bind("<Button-1>", lambda e, t=t: self.copy_one(t))
             txt = tk.Text(f, height=2, wrap="word", relief="flat", bg="white", fg="#333333",
                           font=(FONT, 10), state="disabled", highlightthickness=0)
             txt.pack(fill="x", padx=8, pady=(2, 6))
             txt.bind("<MouseWheel>", self._card_wheel)   # 卡片上滚轮滚列表，避免双滚动
-            cp.bind("<Button-1>", lambda e, t=t: self.copy_one(t))
             self.cards[t] = {"frame": f, "text": txt, "status": st}
         self.scroll.refresh()
         self._update_estimate()
@@ -971,7 +958,6 @@ class App:
 
     def remove_target(self, target):
         self.cfg["targets"] = [t for t in self.cfg["targets"] if t != target]
-        self.rebuild_chips()
         self.rebuild_cards()
 
     # ---- 翻译主流程
@@ -1327,7 +1313,6 @@ class App:
         self.btn_go.configure(text=tr("btn_translate"))
         self.btn_clear.configure(text=tr("btn_clear"))
         self.btn_copy_all.configure(text=tr("btn_copy_all"))
-        self.lbl_targets_lbl.configure(text=tr("lbl_targets"))
         self.lbl_add.configure(text=tr("add_lang"))
         self.rebuild_cards()             # 卡片「待翻译/复制」等标签随语言刷新；译文正文不受影响
 
@@ -1438,7 +1423,6 @@ class App:
                 if c not in order:
                     order.append(c)
             self.cfg["targets"] = order
-            self.rebuild_chips()
             self.rebuild_cards()
             win.destroy()
 

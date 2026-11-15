@@ -3,6 +3,17 @@
 All notable changes to deepl-quick are documented here.
 本文件记录 deepl-quick 的全部重要变更。
 
+## v0.3.2 — 2026-11-15
+
+- Redesigned target-language management: the redundant inline language chips are gone — the result card list itself is the language list. The row below the editor now only keeps the **＋ Language** button, which can no longer be pushed out of the window no matter how many languages are pinned.
+  重做目标语言管理：整排语言标签退役——结果卡片列表本身就是语言清单，输入框下只保留**「＋语言」**按钮，无论勾多少门语言都不可能再被挤出窗口。
+- Each card header now has an **×** next to the copy icon to remove that target language (mistakenly removed ones re-translate from cache at zero cost).
+  卡片头部复制图标旁新增**「×」**，点击即移除该目标语言（误删后重新翻译走缓存、零消耗）。
+- The per-language copy entry is now an icon (⧉) instead of text, language-neutral across UI locales.
+  逐语种复制入口由文字改为复制图标（⧉），跨界面语言通用。
+- Pinned-language cap raised from 8 to 16 (the card list can take it now).
+  常驻目标语言上限 8 → 16（卡片列表已能承载）。
+
 ## v0.3.1 — 2026-11-14
 
 - Fixed: the per-language **Copy** button on result cards had been invisible since v0.1 — the scroll container never synced its content width to the viewport, pushing the button past the visible area (measured ~133px out).

@@ -35,7 +35,7 @@
 - **贴边药丸常驻**：鼠标离开约 0.75s 自动折叠成 39×30 胶囊，悬停展开、静止不弹跳、拖动中不折叠；窗口位置与药丸位置均有记忆
 - **开机自启（可选）**：设置弹窗勾选即写 HKCU Run 键（免管理员），登录后直接缩成贴边药丸；Windows 任务管理器「启动应用」可随时停用；自带单实例保护，不会叠出两枚药丸
 - **自动检测源语言**：无需选择源语言，DeepL 返回检测结果并显示在界面上
-- **常驻目标语言**：默认英/日/中，可从完整语言清单勾选（上限 8 个，保持界面干净）；清单支持在线刷新（DeepL 现已支持 111 门目标语言），DeepL 新增语言不用升级本工具；语言名以原生名显示（日本語 / Deutsch / Français…）
+- **常驻目标语言**：默认英/日/中，可从完整语言清单勾选（上限 16 个）；清单支持在线刷新（DeepL 现已支持 111 门目标语言），DeepL 新增语言不用升级本工具；语言名以原生名显示（日本語 / Deutsch / Français…）；已选语言即结果卡片列表本身，点卡片头部「×」即可移除该语言
 - **界面多语言**：界面自动跟随 Windows 系统语言（中文 / English），可在设置中强制指定，切换即时生效
 - **逐语种一键复制**：每张译文卡片独立复制；「复制全部」按【语言】前缀合并
 - **省额度三件套**：翻译缓存（同文本同语言命中零消耗）、用量仪表（80%/95% 变色预警）、目标语懒加载
@@ -120,7 +120,7 @@ Sibling project: [QuadTodo](https://github.com/geekkkk404/quad-todo) — same si
 - **Edge pill, always resident** — auto-collapses (~0.75s) to a 39×30 pill when the mouse leaves; hover to expand; no bounce while idle, no collapse while dragging; both window and pill positions are remembered
 - **Optional auto-start** — tick it in settings to register an HKCU Run key (no admin needed); the pill docks itself at login; disable anytime from Task Manager → Startup apps; single-instance guard included
 - **Auto source detection** — no language picking; DeepL returns the detected language and the UI shows it
-- **Pinned target languages** — EN/JA/ZH by default, pick from the full language list (up to 8 to keep the UI clean); the list can be refreshed online (DeepL currently serves 111 target languages), so new DeepL languages appear without upgrading this tool; languages are shown by their native names (日本語 / Deutsch / Français…)
+- **Pinned target languages** — EN/JA/ZH by default, pick from the full language list (up to 16); the list can be refreshed online (DeepL currently serves 111 target languages), so new DeepL languages appear without upgrading this tool; languages are shown by their native names (日本語 / Deutsch / Français…); the card list itself shows which languages are pinned — remove one with the "×" on its card header
 - **Multilingual UI** — the interface follows your Windows system language (Chinese / English), and can be pinned to either in Settings; switching applies instantly
 - **One-click copy per language** — each card copies independently; "copy all" merges with language-name prefixes
 - **Quota-friendly trio** — translation cache (cache hits cost nothing), usage badge (amber ≥80%, orange ≥95%), per-request cost estimate before translating
