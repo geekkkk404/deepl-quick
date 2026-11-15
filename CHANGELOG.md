@@ -3,6 +3,19 @@
 All notable changes to deepl-quick are documented here.
 本文件记录 deepl-quick 的全部重要变更。
 
+## v0.3.6 — 2026-11-15
+
+- Title-bar hardening: growing version strings plus the usage badge could crush the last title-bar button to invisibility; the window title now truncates gracefully instead, and the title/usage fonts stepped down one size to fit.
+  标题栏加固：版本串变宽＋用量徽标同框时，最后的字形按钮（钉）可能被挤到不可见；现在空间不足时优雅裁剪标题文本，标题/用量徽标字号各降一号。
+- The **Translate** button is now just "翻译 / Translate" — the Ctrl+Enter hint lives in the status bar (and the README).
+  **翻译**按钮文案精简为「翻译 / Translate」——Ctrl+Enter 提示由状态栏与 README 承载。
+- Detection ("Detected: EN-US") and cost-estimate hints moved from the button row into the status bar, which has dedicated space; under high-DPI the old top-row placement could crush them to a sliver.
+  检测（「检测: EN-US」）与预估消耗提示从按钮行迁入状态栏（有专属空间）——高 DPI 下原位置曾把它们挤成细条。
+- Fixed: the bottom status bar could be squeezed to zero height when many cards existed (the scroll area claimed all space first); it now docks before the scroll area.
+  修复：卡片较多时底部状态栏可能被压成 0 高（滚动区先占光空间）；状态栏现在先停靠底部。
+- Settings dialog resized (500×756) so both button rows are fully visible under high-DPI rendering; the second row was half-clipped at 740 and below.
+  设置弹窗高度按高 DPI 渲染实需校准（500×756）——旧高度下第二行按钮被裁掉一半。
+
 ## v0.3.5 — 2026-11-15
 
 - The **＋ Language** button now shares the button row with Translate / Clear / Copy-all (same styling), freeing an entire vertical row for the result-card list.

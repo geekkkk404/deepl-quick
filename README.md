@@ -10,9 +10,9 @@
   平时缩成一枚胶囊&nbsp;<img src="assets/pill.png" alt="pill" width="39">&nbsp;，悬停即展开 —— 看不懂 → 拿走译文，呼吸之间
 </p>
 
-![version](https://img.shields.io/badge/version-v0.3-2f3640) ![python](https://img.shields.io/badge/Python-3.8%2B-306998) ![platform](https://img.shields.io/badge/Windows-10%20%2F%2011-0078d4) ![license](https://img.shields.io/badge/License-MIT-27ae60) ![selftest](https://img.shields.io/badge/self--test-47%20passing-27ae60)
+![release](https://img.shields.io/github/v/release/geekkkk404/deepl-quick) ![python](https://img.shields.io/badge/Python-3.8%2B-306998) ![platform](https://img.shields.io/badge/Windows-10%20%2F%2011-0078d4) ![license](https://img.shields.io/badge/License-MIT-27ae60) ![selftest](https://img.shields.io/badge/self--test-53%20passing-27ae60)
 
-当前版本：**v0.3** ・ License：[MIT](LICENSE)
+当前版本：**v0.3.6** ・ License：[MIT](LICENSE)
 
 [中文](#-中文) ・ [English](#english)
 
@@ -41,11 +41,11 @@
 - **省额度三件套**：翻译缓存（同文本同语言命中零消耗）、用量仪表（80%/95% 变色预警）、目标语懒加载
 - **本地翻译历史**：可在设置中关闭或一键清空；双击历史条目回填原文
 - **高质量模式**：可选 DeepL 下一代模型（`quality_optimized`），不额外消耗额度
-- **纯本地、零依赖**：密钥、历史、缓存全部只存本机；Python 3.8+ 标准库即可运行（tkinter + urllib），空闲内存 ~30 MB
+- **纯本地、零依赖**：密钥、历史、缓存全部只存本机；可选「重启时清空缓存 / 历史」隐私开关；Python 3.8+ 标准库即可运行（tkinter + urllib），空闲内存 ~30 MB
 
 ### 下载
 
-**绿色免安装包已就绪**：到 [Releases](https://github.com/geekkkk404/deepl-quick/releases) 下载 `deepl-quick-v0.3-win64-portable.zip`，解压后双击 `deepl-quick.bat` 即可——包内自带 Python 运行时，无需安装任何东西。也可从源码运行：装好 Python 3.8+，下载本仓库，双击 `deepl_quick.pyw`（见下）。
+**绿色免安装包已就绪**：到 [Releases 最新版](https://github.com/geekkkk404/deepl-quick/releases/latest) 下载 `deepl-quick-vX.Y.Z-win64-portable.zip`（文件名带版本号，以 latest 页为准），解压后双击 `deepl-quick.bat` 即可——包内自带 Python 运行时，无需安装任何东西。也可从源码运行：装好 Python 3.8+，下载本仓库，双击 `deepl_quick.pyw`（见下）。
 
 ### 快速开始
 
@@ -96,7 +96,7 @@
 python deepl_quick.pyw --smoke
 ```
 
-47 项自检全部离线运行（数据文件重定向到临时目录、注册表读写走 scratch 键，不发任何网络请求）。
+53 项自检全部离线运行（数据文件重定向到临时目录、注册表读写走 scratch 键，不发任何网络请求）。
 
 ### License
 
@@ -127,11 +127,11 @@ Sibling project: [QuadTodo](https://github.com/geekkkk404/quad-todo) — same si
 - **Quota-friendly trio** — translation cache (cache hits cost nothing), usage badge (amber ≥80%, orange ≥95%), per-request cost estimate before translating
 - **Local history** — toggleable and clearable in settings; double-click an entry to refill the source text
 - **High-quality mode** — optionally uses DeepL's next-gen model (`quality_optimized`) at no extra quota cost
-- **Fully local, zero dependencies** — key, history and cache never leave your machine; runs on the Python 3.8+ standard library only (tkinter + urllib); ~30 MB idle memory
+- **Fully local, zero dependencies** — key, history and cache never leave your machine; optional "clear cache / history on restart" privacy switches; runs on the Python 3.8+ standard library only (tkinter + urllib); ~30 MB idle memory
 
 ### Download
 
-**A portable no-install package is ready**: download `deepl-quick-v0.3-win64-portable.zip` from [Releases](https://github.com/geekkkk404/deepl-quick/releases), extract, and double-click `deepl-quick.bat` — the Python runtime is bundled, nothing to install. Or run from source: install Python 3.8+, grab this repo, and double-click `deepl_quick.pyw` (see below).
+**A portable no-install package is ready**: download `deepl-quick-vX.Y.Z-win64-portable.zip` from the [latest release](https://github.com/geekkkk404/deepl-quick/releases/latest) (the filename carries the version; the latest page is authoritative), extract, and double-click `deepl-quick.bat` — the Python runtime is bundled, nothing to install. Or run from source: install Python 3.8+, grab this repo, and double-click `deepl_quick.pyw` (see below).
 
 ### Getting started
 
@@ -168,7 +168,7 @@ Usage is counted in **source characters**: translating one text into 3 languages
 python deepl_quick.pyw --smoke
 ```
 
-47 offline checks (data files go to a temp directory, registry writes go to a scratch key; no network requests).
+53 offline checks (data files go to a temp directory, registry writes go to a scratch key; no network requests).
 
 ### License
 

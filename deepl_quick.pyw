@@ -24,7 +24,7 @@ import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import messagebox
 
-APP_VERSION = "0.3.5"
+APP_VERSION = "0.3.6"
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE = os.path.join(APP_DIR, "config.json")
@@ -111,7 +111,7 @@ STRINGS_ZH = {
     "status_ready": "就绪",
     "app_ready_hint": "就绪——鼠标离开自动缩成贴边药丸，移上去展开；Ctrl+Enter 翻译",
     "app_ready_nokey": "尚未设置 API Key：点标题栏「设」粘贴你的 DeepL key",
-    "btn_translate": "翻译（Ctrl+Enter）",
+    "btn_translate": "翻译",
     "btn_translating": "翻译中…",
     "btn_clear": "清空",
     "btn_copy_all": "复制全部",
@@ -138,7 +138,7 @@ STRINGS_ZH = {
     "status_history_cleared": "历史记录已清空",
     "status_cache_cleared": "翻译缓存已清空",
     "usage_nokey": "未设置 key",
-    "hint_detected": "检测源语言：{lang}",
+    "hint_detected": "检测: {lang}",
     "hint_cache_all": "全部命中缓存，本次零消耗",
     "hint_estimate": "预计消耗 ≈{total} 字符（{chars}×{langs} 语）",
     # ---- 设置弹窗
@@ -199,7 +199,7 @@ STRINGS_EN = {
     "status_ready": "Ready",
     "app_ready_hint": "Ready — move away to snap into the edge pill, hover to expand; Ctrl+Enter translates",
     "app_ready_nokey": "No API key yet: click 「设」 in the title bar and paste your DeepL key",
-    "btn_translate": "Translate (Ctrl+Enter)",
+    "btn_translate": "Translate",
     "btn_translating": "Translating…",
     "btn_clear": "Clear",
     "btn_copy_all": "Copy all",
@@ -226,7 +226,7 @@ STRINGS_EN = {
     "status_history_cleared": "History cleared",
     "status_cache_cleared": "Translation cache cleared",
     "usage_nokey": "no key",
-    "hint_detected": "Detected source: {lang}",
+    "hint_detected": "Detected: {lang}",
     "hint_cache_all": "All cached — this run costs nothing",
     "hint_estimate": "≈{total} chars will be used ({chars}×{langs})",
     # ---- settings dialog
@@ -726,13 +726,12 @@ class App:
         tb = tk.Frame(self.root, bg=TITLE_BG)
         tb.pack(fill="x")
         self.lbl_title = tk.Label(tb, text=f" deepl-quick v{APP_VERSION}", bg=TITLE_BG, fg="white",
-                                  font=(FONT, 10, "bold"))
-        self.lbl_title.pack(side="left")
+                                  font=(FONT, 9, "bold"))   # 9 号：给右缘按钮组留预算（P-018）
         for w in (self.lbl_title, tb):
             w.bind("<Button-1>", self._drag_start)
             w.bind("<B1-Motion>", self._drag_move)
             w.bind("<ButtonRelease-1>", self._drag_end)
-        self.lbl_usage = tk.Label(tb, text="", bg=TITLE_BG, fg="#9fb3c8", font=(FONT, 9))
+        self.lbl_usage = tk.Label(tb, text="", bg=TITLE_BG, fg="#9fb3c8", font=(FONT, 8))
         self.lbl_usage.pack(side="right", padx=(0, 8))   # 最右：用量徽标
         self._title_btn(tb, "✕", self.quit_app)          # 之后依次向左：✕ — 史 设 钉
         self._title_btn(tb, "—", self._manual_collapse)
@@ -740,6 +739,9 @@ class App:
         self._title_btn(tb, "设", self.open_settings)
         self.lbl_pin = self._title_btn(tb, "钉", self.toggle_topmost)
         self._update_pin()
+        # 标题最后排入（P-018）：空间不足时被裁的是标题文本而非字形按钮——
+        # v0.3.5 起版本串变宽＋用量徽标同框，「钉」曾被挤成 1px（mock 截图抓出）
+        self.lbl_title.pack(side="left")
 
         # 输入区
         self.input = tk.Text(self.root, height=4, font=(FONT, 11), wrap="word", relief="flat",
@@ -756,16 +758,12 @@ class App:
         self.btn_go = self._bar_btn(bar, tr("btn_translate"), self.translate_all, primary=True)
         self.btn_clear = self._bar_btn(bar, tr("btn_clear"), self.clear_input)
         self.btn_copy_all = self._bar_btn(bar, tr("btn_copy_all"), self.copy_all)
-        # ＋语言并入按钮行（用户拍板：提高纵向空间利用率，省出整行给结果卡片）
+        # ＋语言并入按钮行（用户拍板：提高纵向空间利用率，省出整行给结果卡片）；
+        # 行内不再放提示文本——检测/估算提示移到状态栏（P-018：DPIAware 下行宽曾超支 80px）
         self.lbl_add = self._bar_btn(bar, tr("add_lang"), self.open_picker)
-        self.lbl_hint = tk.Label(bar, text="", bg=BG, fg="#8a94a0", font=(FONT, 9))
-        self.lbl_hint.pack(side="right")
 
-        # 结果卡片容器（可滚动）
-        self.scroll = ScrollFrame(self.root)
-        self.scroll.pack(fill="both", expand=True, padx=12, pady=(6, 0))
-
-        # 状态栏 + 右下角 resize 手柄
+        # 状态栏 + 右下角 resize 手柄——先于滚动区 pack（P-018）：side=bottom 先占住底部，
+        # 否则 scroll（expand=True）先吃光腔体、卡片一多状态栏就被挤成 0 高（素材摆拍抓出）
         statusbar = tk.Frame(self.root, bg=BG)
         statusbar.pack(fill="x", side="bottom")
         self.lbl_status = tk.Label(statusbar, text=tr("status_ready"), bg=BG, fg="#8a94a0",
@@ -777,6 +775,10 @@ class App:
         grip.bind("<Button-1>", self._resize_start)
         grip.bind("<B1-Motion>", self._resize_move)
         grip.bind("<ButtonRelease-1>", self._drag_end)
+
+        # 结果卡片容器（可滚动）——吃状态栏之外的余量
+        self.scroll = ScrollFrame(self.root)
+        self.scroll.pack(fill="both", expand=True, padx=12, pady=(6, 0))
 
         # 贴边药丸（QuadTodo 同款形态）：主内容收起后只剩一枚「译」小胶囊，贴屏幕右缘
         self.pill = tk.Frame(self.root, bg=TITLE_BG, cursor="hand2")
@@ -793,8 +795,8 @@ class App:
             (tb, {"fill": "x"}),
             (self.input, {"fill": "x", "padx": 12, "pady": (10, 0)}),
             (bar, {"fill": "x", "padx": 12, "pady": 6}),
+            (statusbar, {"fill": "x", "side": "bottom"}),   # 先于 scroll：同 _build_ui 的占底语义（P-018）
             (self.scroll, {"fill": "both", "expand": True, "padx": 12, "pady": (6, 0)}),
-            (statusbar, {"fill": "x", "side": "bottom"}),
         ]
 
     def _title_btn(self, bar, text, cmd):
@@ -807,7 +809,7 @@ class App:
     def _bar_btn(self, bar, text, cmd, primary=False):
         lbl = tk.Label(bar, text=text, bg=TITLE_BG if primary else "#e4e6e9",
                        fg="white" if primary else "#333333", font=(FONT, 10),
-                       padx=14, pady=3, cursor="hand2")
+                       padx=10, pady=3, cursor="hand2")   # padx 10：行宽预算（P-018，en 下曾超支 80px）
         lbl.pack(side="left", padx=(0, 8))
         lbl.bind("<Button-1>", lambda e: cmd())
         return lbl
@@ -1030,11 +1032,11 @@ class App:
     def _update_estimate(self):
         text = self.input.get("1.0", "end").strip()
         if not text:
-            self.lbl_hint.configure(text="")
+            self.set_status(tr("status_ready"))
             return
         n = sum(1 for t in self.cfg["targets"] if cache_key(text, t, self._model_type()) not in self.cache)
-        self.lbl_hint.configure(text=tr("hint_estimate", total=len(text) * n, chars=len(text), langs=n)
-                                if n else tr("hint_cache_all"))
+        self.set_status(tr("hint_estimate", total=len(text) * n, chars=len(text), langs=n)
+                        if n else tr("hint_cache_all"))
 
     def _model_type(self):
         return "quality_optimized" if self.cfg.get("model_quality") else None
@@ -1145,7 +1147,7 @@ class App:
             self._set_card_status(self.cards[target], tr("card_chars", n=billed) if billed else tr("done"),
                                   "#999999")
         if det:
-            self.lbl_hint.configure(text=tr("hint_detected", lang=lang_name(det)))
+            self.set_status(tr("hint_detected", lang=det))   # 语种代码紧凑，原生名在卡片头部（P-018）
         self.scroll.refresh()
 
     def _on_card_err(self, target, msg):
@@ -1230,7 +1232,6 @@ class App:
     def clear_input(self):
         self.input.delete("1.0", "end")
         self._update_estimate()
-        self.lbl_hint.configure(text="")
 
     # ---- 弹窗：设置 / 语言选择 / 历史
 
@@ -1251,9 +1252,10 @@ class App:
         win.resizable(False, False)
         win.transient(self.root)
         # 500 宽：v0.3 起六个 mini 按钮改两行——英文文案更宽，单行会把「关闭」挤成 1px
-        #（P-009 同族，en 弹窗实测抓出；两行布局对任何语言都稳）。高度随「界面语言」区与两行按钮放大，
-        # 无头几何探针逐一断言过六按钮与三 radio；v0.3.4 隐私区再加两个勾选，544→600
-        self._center(win, 500, 600)
+        #（P-009 同族，en 弹窗实测抓出；两行布局对任何语言都稳）。高度随内容放大：
+        # v0.3.4 隐私区加两勾选（544→600），v0.3.6 实测 DPIAware 下 7 勾选+两行按钮
+        # 总需求 ≈735，600/640/720/740 都装不下（en 提示文案折三行多 ~15px，740 时第二行按钮仍被裁）——放至 756
+        self._center(win, 500, 756)
 
         row = tk.Frame(win, bg=BG)
         row.pack(fill="x", padx=14, pady=(14, 4))
