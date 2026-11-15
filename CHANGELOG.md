@@ -3,6 +3,15 @@
 All notable changes to deepl-quick are documented here.
 本文件记录 deepl-quick 的全部重要变更。
 
+## v0.3.3 — 2026-11-15
+
+- **Crash forensics**: the windowed runtime (`pythonw`) exits silently and leaves no trace in the Event Log or WER, which made occasional disappearances impossible to autopsy. Startup, Tk callback exceptions, fatal errors and clean exits are now appended to `%TEMP%\dq_exit.log`.
+  **崩溃取证**：pythonw 静默退出在事件日志/WER 均无痕迹，工具「偶尔失踪」历来无法尸检。现在启动、Tk 回调异常、致命错误、干净退出都会逐行追加到 `%TEMP%\dq_exit.log`。
+- **Self-healing pill**: the 150 ms background poll now re-asserts always-on-top (when enabled) and clamps the window back into the primary screen, so resolution changes / RDP reconnects / sleep-resume can no longer leave the pill off-screen or buried under other windows.
+  **药丸自愈**：150ms 轮询顺带重申置顶（开启时）并把窗口夹回主屏内——分辨率变化 / RDP 重连 / 睡眠唤醒不再可能让药丸滞留屏外或沉底被盖。
+- Verified: smoke 52/52 (+5 new assertions), headless geometry probe 22/22 (offscreen heal, topmost re-assert, untouched in-screen window).
+  验证：smoke 52/52（新增 5 项断言），无头几何探针 22/22（屏外愈合、置顶重申、界内不动几何）。
+
 ## v0.3.2 — 2026-11-15
 
 - Redesigned target-language management: the redundant inline language chips are gone — the result card list itself is the language list. The row below the editor now only keeps the **＋ Language** button, which can no longer be pushed out of the window no matter how many languages are pinned.

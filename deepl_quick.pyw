@@ -12,8 +12,10 @@ import json
 import os
 import queue
 import sys
+import tempfile
 import threading
 import time
+import traceback
 import urllib.error
 import urllib.request
 import winreg
@@ -22,7 +24,7 @@ import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import messagebox
 
-APP_VERSION = "0.3.2"
+APP_VERSION = "0.3.3"
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE = os.path.join(APP_DIR, "config.json")
@@ -40,6 +42,25 @@ AUTO_DELAY_MS = 1500                       # 防抖自动翻译：输入停止�
 TARGETS_MAX = 16                           # 常驻目标语上限（防卡片列表失控；P-015 拍板放宽）
 RUN_KEY_PATH = r"Software\Microsoft\Windows\CurrentVersion\Run"  # 开机自启落点（HKCU，免管理员）
 AUTOSTART_NAME = "deepl-quick"             # Run 键值名（任务管理器「启动应用」页显示这个名字）
+CRASH_LOG = os.path.join(tempfile.gettempdir(), "dq_exit.log")   # 取证日志（U-006 方案 A）
+
+
+def _crashlog(msg):
+    """取证日志（U-006 方案 A）：pythonw 静默退出不留任何系统痕迹，
+    启动/回调异常/致命错误/干净退出逐行落 %TEMP%\\dq_exit.log，死后可尸检。"""
+    try:
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with open(CRASH_LOG, "a", encoding="utf-8") as f:
+            f.write(f"[{ts} pid={os.getpid()}] v{APP_VERSION} {msg}\n")
+    except OSError:
+        pass
+
+
+def _clamp_xy(x, y, w, h, sw, sh):
+    """把窗口坐标夹回主屏内（纯函数，U-006 方案 B；分辨率变化/RDP 重连后自愈）。"""
+    x = max(0, min(int(x), int(sw) - int(w)))
+    y = max(0, min(int(y), int(sh) - int(h)))
+    return x, y
 
 FONT = "Microsoft YaHei UI"
 W, H = 560, 620
@@ -639,6 +660,7 @@ class App:
         self.root = root
         self.cfg = load_config()
         set_ui_lang(resolve_ui_lang(self.cfg.get("ui_lang", "auto")))   # 先定语言再建 UI（U-005）
+        self.root.report_callback_exception = self._report_cb_exc   # 回调异常落取证日志（U-006 A）
         self.key = load_key()
         self.cache = load_cache()
         self.history = load_history()
@@ -878,7 +900,34 @@ class App:
     def _manual_collapse(self):
         self._enter_pill(force=True)
 
+    def _report_cb_exc(self, exc, val, tb):
+        """Tk 回调异常取证（原默认行为是 print 到 pythonw 的 None stderr＝静默吞掉）。"""
+        _crashlog("callback exception: " + "".join(traceback.format_exception(exc, val, tb)))
+
+    def _poll_selfheal(self):
+        """U-006 方案 B：分辨率变化自愈（越界夹回主屏）＋ topmost 重申。
+        只在实际越界/丢置顶时动作，避免每 150ms 扰动几何；拖动/拉伸中不干预。"""
+        if self._pressing:
+            return
+        sw, sh = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
+        w, h = self.root.winfo_width(), self.root.winfo_height()
+        x, y = self.root.winfo_x(), self.root.winfo_y()
+        if x < 0 or y < 0 or x + w > sw or y + h > sh:
+            nx, ny = _clamp_xy(x, y, w, h, sw, sh)
+            # 必须全串（带尺寸）：实测全串 geometry 请求后紧跟的 position-only 串
+            # 会被 Tk 静默吞掉（首次不发效，下一轮才生效）——全串首 call 即落地
+            self.root.geometry(f"{w}x{h}+{nx}+{ny}")
+            if self._pill_mode:
+                self._pill_y = ny
+        if self.cfg.get("topmost"):
+            try:
+                if not self.root.wm_attributes("-topmost"):
+                    self.root.attributes("-topmost", True)
+            except tk.TclError:
+                pass
+
     def _auto_pill_poll(self):
+        self._poll_selfheal()
         if self._pill_mode:
             # 展开靠轮询指针坐标（winfo_pointer 按需读真实位置，不依赖事件投递，
             # RDP/虚拟化下 Motion 事件可能整批丢失——P-007 实测）；静止点不弹（P-003）
@@ -1535,12 +1584,13 @@ def save_history_file(history):
 
 def run_smoke():
     import tempfile
-    global CONFIG_FILE, KEY_FILE, CACHE_FILE, HISTORY_FILE
+    global CONFIG_FILE, KEY_FILE, CACHE_FILE, HISTORY_FILE, CRASH_LOG
     tmp = tempfile.mkdtemp(prefix="dq_smoke_")
     CONFIG_FILE = os.path.join(tmp, "config.json")
     KEY_FILE = os.path.join(tmp, ".deepl-key")
     CACHE_FILE = os.path.join(tmp, "cache.json")
     HISTORY_FILE = os.path.join(tmp, "history.json")
+    CRASH_LOG = os.path.join(tmp, "dq_exit.log")
 
     results = []
 
@@ -1712,6 +1762,19 @@ def run_smoke():
           and lang_name("EN-US").startswith("English") and lang_name("ZH") == "简体中文")
     check("default ui_lang auto", load_config()["ui_lang"] == "auto")
 
+    # 18 取证日志与窗口自愈纯函数（U-006 方案 A/B）
+    _crashlog("smoke entry test")
+    _crashlog("FATAL: smoke traceback test")
+    with open(CRASH_LOG, encoding="utf-8") as f:
+        lines = f.read().strip().splitlines()
+    check("crashlog writes pid/version lines", len(lines) == 2
+          and f"pid={os.getpid()}" in lines[0] and f"v{APP_VERSION}" in lines[0]
+          and "FATAL:" in lines[1])
+    check("clamp inside stays", _clamp_xy(100, 100, 400, 600, 1920, 1080) == (100, 100))
+    check("clamp right/bottom edge", _clamp_xy(5000, 800, 400, 600, 1920, 1080) == (1520, 480))
+    check("clamp negative", _clamp_xy(-50, -20, 400, 600, 1920, 1080) == (0, 0))
+    check("clamp oversized window", _clamp_xy(100, 100, 2000, 1200, 1920, 1080) == (0, 0))
+
     passed = sum(1 for _n, ok in results if ok)
     for name, ok in results:
         print(f"  {'PASS' if ok else 'FAIL'}  {name}")
@@ -1720,14 +1783,21 @@ def run_smoke():
 
 
 def main():
+    _crashlog("startup")
     if not acquire_single_instance():
+        _crashlog("exit: mutex busy (another instance already running)")
         return                   # 已有实例在跑（自启的那枚药丸就在右缘）——静默退出
-    root = tk.Tk()
-    app = App(root)
-    if "--minimized" in sys.argv:
-        root.update_idletasks()  # 先让 _restore_window 的 geometry 落地，折叠取到的尺寸才真实
-        app._enter_pill(force=True)   # force：登录启动时指针可能恰在窗区，不许弹回全窗
-    root.mainloop()
+    try:
+        root = tk.Tk()
+        app = App(root)
+        if "--minimized" in sys.argv:
+            root.update_idletasks()  # 先让 _restore_window 的 geometry 落地，折叠取到的尺寸才真实
+            app._enter_pill(force=True)   # force：登录启动时指针可能恰在窗区，不许弹回全窗
+        root.mainloop()
+        _crashlog("exit: clean (mainloop returned)")   # 用户主动 ✕ 关闭走这里
+    except Exception:
+        _crashlog("FATAL: " + traceback.format_exc())
+        raise
 
 
 if __name__ == "__main__":
