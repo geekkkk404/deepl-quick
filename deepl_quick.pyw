@@ -24,7 +24,7 @@ import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import messagebox
 
-APP_VERSION = "0.3.4"
+APP_VERSION = "0.3.5"
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE = os.path.join(APP_DIR, "config.json")
@@ -756,17 +756,10 @@ class App:
         self.btn_go = self._bar_btn(bar, tr("btn_translate"), self.translate_all, primary=True)
         self.btn_clear = self._bar_btn(bar, tr("btn_clear"), self.clear_input)
         self.btn_copy_all = self._bar_btn(bar, tr("btn_copy_all"), self.copy_all)
+        # ＋语言并入按钮行（用户拍板：提高纵向空间利用率，省出整行给结果卡片）
+        self.lbl_add = self._bar_btn(bar, tr("add_lang"), self.open_picker)
         self.lbl_hint = tk.Label(bar, text="", bg=BG, fg="#8a94a0", font=(FONT, 9))
         self.lbl_hint.pack(side="right")
-
-        # 目标语管理入口：卡片列表本身即语言清单，这里只留 ＋语言（P-015 拍板，chips 退役）
-        langbar = tk.Frame(self.root, bg=BG)
-        langbar.pack(fill="x", padx=12)
-        add = tk.Label(langbar, text=tr("add_lang"), bg="#dfe3ea", fg=TITLE_BG, font=(FONT, 9),
-                       padx=6, pady=2, cursor="hand2")
-        self.lbl_add = add
-        add.pack(side="left")
-        add.bind("<Button-1>", lambda e: self.open_picker())
 
         # 结果卡片容器（可滚动）
         self.scroll = ScrollFrame(self.root)
@@ -800,7 +793,6 @@ class App:
             (tb, {"fill": "x"}),
             (self.input, {"fill": "x", "padx": 12, "pady": (10, 0)}),
             (bar, {"fill": "x", "padx": 12, "pady": 6}),
-            (langbar, {"fill": "x", "padx": 12}),
             (self.scroll, {"fill": "both", "expand": True, "padx": 12, "pady": (6, 0)}),
             (statusbar, {"fill": "x", "side": "bottom"}),
         ]

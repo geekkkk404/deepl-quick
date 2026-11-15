@@ -3,6 +3,13 @@
 All notable changes to deepl-quick are documented here.
 本文件记录 deepl-quick 的全部重要变更。
 
+## v0.3.5 — 2026-11-15
+
+- The **＋ Language** button now shares the button row with Translate / Clear / Copy-all (same styling), freeing an entire vertical row for the result-card list.
+  **「＋语言」按钮并入按钮行**（与翻译/清空/复制全部同排同款样式），整行垂直空间让给结果卡片列表。
+- Verified: smoke 53/53, headless probe 33/33 — all four bar buttons point-named inside the window at both the default 560px and the minimum 420px width.
+  验证：smoke 53/53，无头探针 33/33——四个按钮在默认 560 宽与最小 420 宽下逐一点名断言在界内。
+
 ## v0.3.4 — 2026-11-15
 
 - Fixed: Settings / History / Language-picker dialogs could get buried under the main window — the v0.3.3 self-heal re-asserted main-window always-on-top every 150 ms, pushing the owned dialogs below it. Self-heal now pauses entirely while any dialog is open.
