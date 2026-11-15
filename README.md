@@ -84,6 +84,7 @@
 - 界面语言提供中文与英文；其他语言的系统会回落到英文界面
 - 阿拉伯语 / 希伯来语等从右到左（RTL）书写的译文正常显示，但界面本身不支持 RTL 布局
 - 语言选择器中，内置 35 门常用语言以原生名显示；在线刷新拉到的其余语言显示 DeepL 返回的英文名
+- 隐私边界（本地文件之外的平台固有暴露面，工具无法代管）：①复制的译文会进 Windows **剪贴板**——若开启了剪贴板历史（Win+V）与跨设备同步，内容会被微软侧保存/同步，敏感译文建议在系统设置关闭该功能；②原文/译文驻留内存，睡眠/**休眠**时随 RAM 落盘（hiberfil.sys/页面文件）；③源文本必然经过 DeepL 服务端（API 固有）。本工具本地落盘的用户文本仅 `cache.json` 与 `history.json` 两处，可在设置中开启「重启时清空」或在弹窗中手动清空
 
 ### 额度说明
 
@@ -155,6 +156,7 @@ Sibling project: [QuadTodo](https://github.com/geekkkk404/quad-todo) — same si
 - The UI ships in Chinese and English; other system languages fall back to English
 - RTL scripts (Arabic, Hebrew…) display fine as translation output, but the UI itself does not mirror
 - In the language picker, the 35 built-in languages show native names; the rest of the online list shows DeepL's English names
+- Privacy boundary (platform-inherent exposures beyond local files, which no widget can manage for you): ① copied translations land in the Windows **clipboard** — with clipboard history (Win+V) and cross-device sync enabled, Microsoft keeps/syncs the content; disable it in system settings for sensitive text; ② source/translation text lives in memory and spills to disk (hiberfil.sys / pagefile) on sleep/**hibernation**; ③ source text necessarily transits DeepL servers (inherent to the API). Locally, the only files persisting user text are `cache.json` and `history.json` — enable the "clear on restart" switches or clear them from Settings
 
 ### Quota notes
 

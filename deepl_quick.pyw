@@ -24,7 +24,7 @@ import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import messagebox
 
-APP_VERSION = "0.3.3"
+APP_VERSION = "0.3.4"
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE = os.path.join(APP_DIR, "config.json")
@@ -94,6 +94,8 @@ DEFAULT_CONFIG = {
     "pill_y": 120,                # 贴边药丸的纵向位置（屏幕右缘）
     "targets": list(DEFAULT_TARGETS),
     "save_history": True,
+    "clear_cache_on_exit": False,  # P-017 隐私开关：下次启动清空缓存（含崩溃残留）
+    "clear_history_on_exit": False,  # P-017 隐私开关：下次启动清空历史（含崩溃残留）
     "model_quality": False,       # True → model_type=quality_optimized（next-gen 高质量）
     "auto_translate": False,      # 输入防抖自动翻译（已确认默认关）
     "topmost": True,
@@ -153,6 +155,8 @@ STRINGS_ZH = {
     "chk_auto": "输入停止后自动翻译（防抖 1.5s，默认关）",
     "chk_topmost": "窗口置顶",
     "chk_autostart": "开机自启（登录后缩成右缘药丸）",
+    "chk_clear_cache": "重启时清空翻译缓存（隐私）",
+    "chk_clear_history": "重启时清空历史记录（隐私）",
     "btn_save": "保存设置",
     "btn_delete_key": "删除 key",
     "btn_clear_history": "清空历史",
@@ -239,6 +243,8 @@ STRINGS_EN = {
     "chk_auto": "Auto-translate after typing pauses (1.5 s debounce, off by default)",
     "chk_topmost": "Keep window on top",
     "chk_autostart": "Start with Windows (login shows the edge pill)",
+    "chk_clear_cache": "Clear translation cache on restart (privacy)",
+    "chk_clear_history": "Clear history on restart (privacy)",
     "btn_save": "Save",
     "btn_delete_key": "Delete key",
     "btn_clear_history": "Clear history",
@@ -662,6 +668,11 @@ class App:
         set_ui_lang(resolve_ui_lang(self.cfg.get("ui_lang", "auto")))   # 先定语言再建 UI（U-005）
         self.root.report_callback_exception = self._report_cb_exc   # 回调异常落取证日志（U-006 A）
         self.key = load_key()
+        # P-017 隐私开关：重启即清空（先于加载落地，崩溃死亡留下的残留同样被清）
+        if self.cfg.get("clear_cache_on_exit"):
+            save_cache_file({})
+        if self.cfg.get("clear_history_on_exit"):
+            save_history_file([])
         self.cache = load_cache()
         self.history = load_history()
         self.msgq = queue.Queue()
@@ -906,8 +917,10 @@ class App:
 
     def _poll_selfheal(self):
         """U-006 方案 B：分辨率变化自愈（越界夹回主屏）＋ topmost 重申。
-        只在实际越界/丢置顶时动作，避免每 150ms 扰动几何；拖动/拉伸中不干预。"""
-        if self._pressing:
+        只在实际越界/丢置顶时动作，避免每 150ms 扰动几何；拖动/拉伸中不干预。
+        弹窗打开期间整体跳过（P-016）：重申 topmost 会把主窗重新插到 topmost 带
+        顶端，压住属主关系在它之上的设置/历史/选语言弹窗。"""
+        if self._pressing or self._dialogs_open():
             return
         sw, sh = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
         w, h = self.root.winfo_width(), self.root.winfo_height()
@@ -1247,8 +1260,8 @@ class App:
         win.transient(self.root)
         # 500 宽：v0.3 起六个 mini 按钮改两行——英文文案更宽，单行会把「关闭」挤成 1px
         #（P-009 同族，en 弹窗实测抓出；两行布局对任何语言都稳）。高度随「界面语言」区与两行按钮放大，
-        # 无头几何探针逐一断言过六按钮与三 radio
-        self._center(win, 500, 544)
+        # 无头几何探针逐一断言过六按钮与三 radio；v0.3.4 隐私区再加两个勾选，544→600
+        self._center(win, 500, 600)
 
         row = tk.Frame(win, bg=BG)
         row.pack(fill="x", padx=14, pady=(14, 4))
@@ -1283,12 +1296,16 @@ class App:
         self.var_auto = tk.BooleanVar(value=bool(self.cfg.get("auto_translate")))
         self.var_top = tk.BooleanVar(value=bool(self.cfg.get("topmost")))
         self.var_autostart = tk.BooleanVar(value=autostart_enabled())  # 唯一事实源=注册表，不落 config.json
+        self.var_clear_cache = tk.BooleanVar(value=bool(self.cfg.get("clear_cache_on_exit")))
+        self.var_clear_history = tk.BooleanVar(value=bool(self.cfg.get("clear_history_on_exit")))
         for label, var, tip in (
                 (tr("chk_history"), self.var_hist, ""),
                 (tr("chk_quality"), self.var_quality, ""),
                 (tr("chk_auto"), self.var_auto, ""),
                 (tr("chk_topmost"), self.var_top, ""),
-                (tr("chk_autostart"), self.var_autostart, "")):
+                (tr("chk_autostart"), self.var_autostart, ""),
+                (tr("chk_clear_cache"), self.var_clear_cache, ""),
+                (tr("chk_clear_history"), self.var_clear_history, "")):
             tk.Checkbutton(win, text=label, variable=var, bg=BG, font=(FONT, 10),
                            anchor="w").pack(fill="x", padx=14)
 
@@ -1331,6 +1348,8 @@ class App:
         self.cfg["model_quality"] = bool(self.var_quality.get())
         self.cfg["auto_translate"] = bool(self.var_auto.get())
         self.cfg["topmost"] = bool(self.var_top.get())
+        self.cfg["clear_cache_on_exit"] = bool(self.var_clear_cache.get())
+        self.cfg["clear_history_on_exit"] = bool(self.var_clear_history.get())
         self.cfg["host_mode"] = self.var_host.get()
         self.cfg["ui_lang"] = self.var_ui.get()
         save_config_file(self.cfg)
@@ -1761,6 +1780,8 @@ def run_smoke():
     check("native lang names", lang_name("JA") == "日本語" and lang_name("DE") == "Deutsch"
           and lang_name("EN-US").startswith("English") and lang_name("ZH") == "简体中文")
     check("default ui_lang auto", load_config()["ui_lang"] == "auto")
+    check("privacy switches default off", load_config()["clear_cache_on_exit"] is False
+          and load_config()["clear_history_on_exit"] is False)
 
     # 18 取证日志与窗口自愈纯函数（U-006 方案 A/B）
     _crashlog("smoke entry test")

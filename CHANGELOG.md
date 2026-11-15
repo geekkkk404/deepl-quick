@@ -3,6 +3,15 @@
 All notable changes to deepl-quick are documented here.
 本文件记录 deepl-quick 的全部重要变更。
 
+## v0.3.4 — 2026-11-15
+
+- Fixed: Settings / History / Language-picker dialogs could get buried under the main window — the v0.3.3 self-heal re-asserted main-window always-on-top every 150 ms, pushing the owned dialogs below it. Self-heal now pauses entirely while any dialog is open.
+  修复：设置 / 历史 / 选语言弹窗可能被主窗压住——v0.3.3 的自愈每 150ms 重申主窗置顶，把属主关系在其之上的弹窗挤了下去。现在任何弹窗打开期间自愈整体暂停。
+- New privacy switches in Settings → Behavior: **"Clear translation cache on restart"** and **"Clear history on restart"** (both off by default). Clearing happens at next launch — including residue left behind by crashed sessions, which plain "clear on exit" would miss.
+  设置 → 行为区新增隐私开关：**「重启时清空翻译缓存」**与**「重启时清空历史记录」**（默认均关）。清空发生在下次启动时——崩溃死亡留下的残留同样会被清掉，这是「退出时清空」做不到的。
+- Privacy audit: `cache.json` and `history.json` are the only local files that persist user text (note: the cache stores full source+translation text even when "Save history" is off — hence the cache switch). The crash forensics log contains metadata only (timestamps / pid / version / exception stack, no user text). OS-level exposures (Windows clipboard history incl. Win+V cloud sync, pagefile/hibernation) are inherent to the platform and documented in the README.
+  隐私探查结论：本地持久化用户文本的只有 `cache.json` 与 `history.json` 两处（注意：即便关闭「保存历史」，缓存也存全量原文+译文——这正是缓存开关的意义）；取证日志仅元数据（时间戳/pid/版本/异常栈，无用户文本）；OS 层暴露面（Windows 剪贴板历史含 Win+V 云同步、休眠/页面文件）属平台固有，已在 README 说明。
+
 ## v0.3.3 — 2026-11-15
 
 - **Crash forensics**: the windowed runtime (`pythonw`) exits silently and leaves no trace in the Event Log or WER, which made occasional disappearances impossible to autopsy. Startup, Tk callback exceptions, fatal errors and clean exits are now appended to `%TEMP%\dq_exit.log`.
