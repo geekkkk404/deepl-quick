@@ -10,9 +10,9 @@
   平时缩成一枚胶囊&nbsp;<img src="assets/pill.png" alt="pill" width="39">&nbsp;，悬停即展开 —— 看不懂 → 拿走译文，呼吸之间
 </p>
 
-![release](https://img.shields.io/github/v/release/geekkkk404/deepl-quick) ![python](https://img.shields.io/badge/Python-3.8%2B-306998) ![platform](https://img.shields.io/badge/Windows-10%20%2F%2011-0078d4) ![license](https://img.shields.io/badge/License-MIT-27ae60) ![selftest](https://img.shields.io/badge/self--test-53%20passing-27ae60)
+![release](https://img.shields.io/github/v/release/geekkkk404/deepl-quick) ![python](https://img.shields.io/badge/Python-3.8%2B-306998) ![platform](https://img.shields.io/badge/Windows-10%20%2F%2011-0078d4) ![license](https://img.shields.io/badge/License-MIT-27ae60) ![selftest](https://img.shields.io/badge/self--test-56%20passing-27ae60)
 
-当前版本：**v0.3.6** ・ License：[MIT](LICENSE)
+当前版本：**v0.3.7** ・ License：[MIT](LICENSE)
 
 [中文](#-中文) ・ [English](#english)
 
@@ -35,10 +35,11 @@
 - **贴边药丸常驻**：鼠标离开约 0.75s 自动折叠成 39×30 胶囊，悬停展开、静止不弹跳、拖动中不折叠；窗口位置与药丸位置均有记忆；后台轮询自动重申置顶并把窗口夹回屏内（分辨率变化 / 睡眠唤醒 / RDP 重连自愈），运行痕迹落 `%TEMP%\dq_exit.log` 可事后排查
 - **开机自启（可选）**：设置弹窗勾选即写 HKCU Run 键（免管理员），登录后直接缩成贴边药丸；Windows 任务管理器「启动应用」可随时停用；自带单实例保护，不会叠出两枚药丸
 - **自动检测源语言**：无需选择源语言，DeepL 返回检测结果并显示在界面上
-- **常驻目标语言**：默认英/日/中，可从完整语言清单勾选（上限 16 个）；清单支持在线刷新（DeepL 现已支持 111 门目标语言），DeepL 新增语言不用升级本工具；语言名以原生名显示（日本語 / Deutsch / Français…）；已选语言即结果卡片列表本身，点卡片头部「×」即可移除该语言
+- **常驻目标语言**：默认英/日/中，可从完整语言清单勾选（上限 16 个）；清单支持在线刷新（DeepL 现已支持 111 门目标语言），DeepL 新增语言不用升级本工具；语言名以原生名显示（日本語 / Deutsch / Français…）；已选语言即结果卡片列表本身，点卡片头部「×」移除、「⏸」临时停用（本次不翻译、不扣额度，点「▶」恢复，清单不丢）
 - **界面多语言**：界面自动跟随 Windows 系统语言（中文 / English），可在设置中强制指定，切换即时生效
 - **逐语种一键复制**：每张译文卡片独立复制；「复制全部」按【语言】前缀合并
-- **省额度三件套**：翻译缓存（同文本同语言命中零消耗）、用量仪表（80%/95% 变色预警）、目标语懒加载
+- **长译文完整展示**：卡片高度随译文自适应（窗口缩放后自动重排），长译文完整展开，配合列表滚动 / 拖高窗口查看——不再固定两行截断
+- **省额度三件套**：翻译缓存（同文本同语言命中零消耗）、用量仪表（80%/95% 变色预警）、目标语懒加载；临时停用目标语（卡片头部「⏸」）可直接砍掉本次不需要的语种消耗
 - **本地翻译历史**：可在设置中关闭或一键清空；双击历史条目回填原文
 - **高质量模式**：可选 DeepL 下一代模型（`quality_optimized`），不额外消耗额度
 - **纯本地、零依赖**：密钥、历史、缓存全部只存本机；可选「重启时清空缓存 / 历史」隐私开关；Python 3.8+ 标准库即可运行（tkinter + urllib），空闲内存 ~30 MB
@@ -59,9 +60,10 @@
 | 操作 | 方式 |
 |------|------|
 | 翻译 | `Ctrl+Enter` 或点「翻译」 |
-| 复制某门语言 | 该卡片右上角「复制」 |
+| 复制某门语言 | 该卡片右上角「⧉」 |
 | 复制全部译文 | 「复制全部」 |
-| 增删常驻语言 | 语言条「＋语言」；chip 上「×」移除 |
+| 增删常驻语言 | 「＋语言」勾选；卡片头部「×」移除 |
+| 临时停用某语言（省额度） | 卡片头部「⏸」停用、「▶」恢复（仅本会话有效） |
 | 历史 | 标题栏「史」，双击条目回填原文 |
 | 设置（key / 高质量模式 / 历史开关 / host / 开机自启 / 界面语言） | 标题栏「设」 |
 | 折叠 / 展开 | 标题栏「—」；或鼠标离开 / 悬停自动 |
@@ -69,7 +71,7 @@
 | 置顶开关 | 标题栏「钉」（绿=开） |
 
 <p align="center">
-  <img src="assets/settings_zh.png" alt="设置弹窗" width="500">
+  <img src="assets/settings_zh.png" alt="设置弹窗" width="580">
 </p>
 
 ### 隐私
@@ -88,7 +90,7 @@
 
 ### 额度说明
 
-计费按**源文本字符数**：同一段文本翻 3 门语言 = 3 次请求 = 3 倍字符。本工具为此内置：缓存优先（命中零消耗）、默认手动触发（防抖自动翻可开）、每次翻译前显示预估消耗、额度耗尽（HTTP 456）明确提示不再重试。
+计费按**源文本字符数**：同一段文本翻 3 门语言 = 3 次请求 = 3 倍字符。本工具为此内置：缓存优先（命中零消耗）、默认手动触发（防抖自动翻可开）、每次翻译前显示预估消耗、卡片头部「⏸」临时停用本次不需要的语种、额度耗尽（HTTP 456）明确提示不再重试。
 
 ### 自检
 
@@ -96,7 +98,7 @@
 python deepl_quick.pyw --smoke
 ```
 
-53 项自检全部离线运行（数据文件重定向到临时目录、注册表读写走 scratch 键，不发任何网络请求）。
+56 项自检全部离线运行（数据文件重定向到临时目录、注册表读写走 scratch 键，不发任何网络请求）。
 
 ### License
 
@@ -110,8 +112,6 @@ python deepl_quick.pyw --smoke
 
 `deepl-quick` is a tiny translator widget for Windows: it normally shrinks into a single-character 「译」pill docked at the right edge of your screen. Hover to expand, paste any text, and DeepL auto-detects the source language while translating into your pinned target languages at once — each result one click away from your clipboard.
 
-Sibling project: [QuadTodo](https://github.com/geekkkk404/quad-todo) — same single-file, zero-dependency, fully-local philosophy.
-
 <p align="center">
   <img src="assets/hero_en.png" alt="deepl-quick main window" width="520">
 </p>
@@ -121,10 +121,11 @@ Sibling project: [QuadTodo](https://github.com/geekkkk404/quad-todo) — same si
 - **Edge pill, always resident** — auto-collapses (~0.75s) to a 39×30 pill when the mouse leaves; hover to expand; no bounce while idle, no collapse while dragging; both window and pill positions are remembered; the background poll re-asserts always-on-top and keeps the window inside the screen (self-heals after resolution changes / sleep-resume / RDP reconnects); runtime trace goes to `%TEMP%\dq_exit.log` for post-mortem checks
 - **Optional auto-start** — tick it in settings to register an HKCU Run key (no admin needed); the pill docks itself at login; disable anytime from Task Manager → Startup apps; single-instance guard included
 - **Auto source detection** — no language picking; DeepL returns the detected language and the UI shows it
-- **Pinned target languages** — EN/JA/ZH by default, pick from the full language list (up to 16); the list can be refreshed online (DeepL currently serves 111 target languages), so new DeepL languages appear without upgrading this tool; languages are shown by their native names (日本語 / Deutsch / Français…); the card list itself shows which languages are pinned — remove one with the "×" on its card header
+- **Pinned target languages** — EN/JA/ZH by default, pick from the full language list (up to 16); the list can be refreshed online (DeepL currently serves 111 target languages), so new DeepL languages appear without upgrading this tool; languages are shown by their native names (日本語 / Deutsch / Français…); the card list itself shows which languages are pinned — temporarily pause one with "⏸" on its card header (skipped this round, costs nothing; "▶" restores it, the pinned list never changes), remove with "×"
 - **Multilingual UI** — the interface follows your Windows system language (Chinese / English), and can be pinned to either in Settings; switching applies instantly
 - **One-click copy per language** — each card copies independently; "copy all" merges with language-name prefixes
-- **Quota-friendly trio** — translation cache (cache hits cost nothing), usage badge (amber ≥80%, orange ≥95%), per-request cost estimate before translating
+- **Full-length output** — card heights auto-fit their translation (re-fitting on window resize); long translations expand in full with list scrolling / window resizing — nothing is clipped to two fixed lines anymore
+- **Quota-friendly trio** — translation cache (cache hits cost nothing), usage badge (amber ≥80%, orange ≥95%), per-request cost estimate before translating; temporarily pause languages you don't need this round with the card-header "⏸"
 - **Local history** — toggleable and clearable in settings; double-click an entry to refill the source text
 - **High-quality mode** — optionally uses DeepL's next-gen model (`quality_optimized`) at no extra quota cost
 - **Fully local, zero dependencies** — key, history and cache never leave your machine; optional "clear cache / history on restart" privacy switches; runs on the Python 3.8+ standard library only (tkinter + urllib); ~30 MB idle memory
@@ -141,7 +142,7 @@ Sibling project: [QuadTodo](https://github.com/geekkkk404/quad-todo) — same si
 4. Hover the pill to expand, type, press `Ctrl+Enter`.
 
 <p align="center">
-  <img src="assets/settings_en.png" alt="Settings dialog" width="500">
+  <img src="assets/settings_en.png" alt="Settings dialog" width="580">
 </p>
 
 ### Privacy
@@ -160,7 +161,7 @@ Sibling project: [QuadTodo](https://github.com/geekkkk404/quad-todo) — same si
 
 ### Quota notes
 
-Usage is counted in **source characters**: translating one text into 3 languages = 3 requests = 3× characters. This tool therefore ships with: cache-first requests (hits cost nothing), manual trigger by default (debounced auto-translate is optional), a per-request cost estimate, and a clear stop on quota exhaustion (HTTP 456).
+Usage is counted in **source characters**: translating one text into 3 languages = 3 requests = 3× characters. This tool therefore ships with: cache-first requests (hits cost nothing), manual trigger by default (debounced auto-translate is optional), a per-request cost estimate, a card-header "⏸" to pause languages you don't need this round, and a clear stop on quota exhaustion (HTTP 456).
 
 ### Self-test
 
@@ -168,7 +169,7 @@ Usage is counted in **source characters**: translating one text into 3 languages
 python deepl_quick.pyw --smoke
 ```
 
-53 offline checks (data files go to a temp directory, registry writes go to a scratch key; no network requests).
+56 offline checks (data files go to a temp directory, registry writes go to a scratch key; no network requests).
 
 ### License
 

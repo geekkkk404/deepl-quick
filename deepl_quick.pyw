@@ -24,7 +24,7 @@ import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import messagebox
 
-APP_VERSION = "0.3.6"
+APP_VERSION = "0.3.7"
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE = os.path.join(APP_DIR, "config.json")
@@ -64,7 +64,7 @@ def _clamp_xy(x, y, w, h, sw, sh):
 
 FONT = "Microsoft YaHei UI"
 W, H = 560, 620
-PILL_H = 30                # 贴边药丸高度（宽度按文字实测自适应，不写死——QuadTodo P-002 教训）
+PILL_H = 30                # 贴边药丸高度（宽度按文字实测自适应，不写死）
 BG = "#f2f3f5"
 TITLE_BG = "#2f3640"
 CARD_BG = "#e8eaf0"
@@ -121,6 +121,8 @@ STRINGS_ZH = {
     "card_chars": "{n} 字符",
     "card_failed": "失败",
     "card_quota_out": "额度耗尽",
+    "card_paused": "已暂停（不参与翻译）",
+    "status_all_paused": "目标语已全部暂停——点卡片上的 ▶ 恢复",
     "done": "完成",
     "status_copied": "已复制到剪贴板",
     "status_translating_progress": "翻译中 {i}/{n} …",
@@ -144,7 +146,7 @@ STRINGS_ZH = {
     # ---- 设置弹窗
     "dlg_settings": "设置",
     "settings_key_hint": "粘贴后点「保存设置」覆盖旧 key；点「删除 key」移除。key 只存本地 .deepl-key，绝不入库。",
-    "host_auto": "自动（按 :fx 后缀）",
+    "host_auto": "自动（:fx 后缀）",
     "host_free": "免费档 api-free",
     "host_pro": "付费 api.deepl",
     "sec_behavior": "行为",
@@ -152,7 +154,7 @@ STRINGS_ZH = {
     "ui_auto": "自动（跟随系统）",
     "chk_history": "保存历史记录（历史即翻译缓存）",
     "chk_quality": "高质量模式（next-gen 模型，质量优先）",
-    "chk_auto": "输入停止后自动翻译（防抖 1.5s，默认关）",
+    "chk_auto": "输入停止后自动翻译（防抖 1.5s）",
     "chk_topmost": "窗口置顶",
     "chk_autostart": "开机自启（登录后缩成右缘药丸）",
     "chk_clear_cache": "重启时清空翻译缓存（隐私）",
@@ -209,6 +211,8 @@ STRINGS_EN = {
     "card_chars": "{n} chars",
     "card_failed": "Failed",
     "card_quota_out": "quota exhausted",
+    "card_paused": "Paused (not translated)",
+    "status_all_paused": "All targets paused — click ▶ on a card to resume",
     "done": "Done",
     "status_copied": "Copied to clipboard",
     "status_translating_progress": "Translating {i}/{n}…",
@@ -240,7 +244,7 @@ STRINGS_EN = {
     "ui_auto": "Auto (follow system)",
     "chk_history": "Save history (history doubles as the cache log)",
     "chk_quality": "High-quality mode (next-gen model, quality first)",
-    "chk_auto": "Auto-translate after typing pauses (1.5 s debounce, off by default)",
+    "chk_auto": "Auto-translate after typing pauses (1.5s debounce)",
     "chk_topmost": "Keep window on top",
     "chk_autostart": "Start with Windows (login shows the edge pill)",
     "chk_clear_cache": "Clear translation cache on restart (privacy)",
@@ -457,6 +461,47 @@ def autostart_disable(key_path=RUN_KEY_PATH):
             winreg.DeleteValue(k, AUTOSTART_NAME)
     except FileNotFoundError:
         pass
+
+
+# topmost 真实样式位检测（U-006 补记盲区修复）：Tk 的 wm_attributes("-topmost")
+# 返回内部缓存，外部程序经 Win32 SetWindowPos 直接降级后仍报 True，纯 Tk 检测
+# 永不触发重申——必须问系统本人。argtypes 显式声明：不设时句柄/负值常量按
+# c_int 零扩展的 ctypes 坑（账本在册）。
+_u32 = ctypes.WinDLL("user32", use_last_error=True)
+_u32.GetAncestor.argtypes = (ctypes.c_void_p, ctypes.c_uint)
+_u32.GetAncestor.restype = ctypes.c_void_p
+_u32.GetWindowLongW.argtypes = (ctypes.c_void_p, ctypes.c_int)
+_u32.GetWindowLongW.restype = ctypes.c_long
+GWL_EXSTYLE = -20
+WS_EX_TOPMOST = 0x00000008
+GA_ROOT = 2
+
+
+def _is_real_topmost(hwnd):
+    """读 Windows 真实样式位判断 topmost。winfo_id 在 Tk 窗口上可能是内部子窗
+    句柄，先 GetAncestor(GA_ROOT) 上到真顶层再查 EXSTYLE。"""
+    try:
+        hwnd = int(hwnd)
+    except (TypeError, ValueError):
+        return False
+    if not hwnd:
+        return False
+    try:
+        root_hwnd = _u32.GetAncestor(hwnd, GA_ROOT) or hwnd
+        ex = _u32.GetWindowLongW(root_hwnd, GWL_EXSTYLE)
+        return bool(ex & WS_EX_TOPMOST)
+    except Exception:
+        return False
+
+
+def active_targets(targets, paused):
+    """P-020：参与本次翻译的目标语＝常驻清单去掉临时停用（会话级集合）。"""
+    return [t for t in targets if t not in paused]
+
+
+def card_height_for(displaylines):
+    """P-019：卡片译文框高度＝真实折行数（下限 2 行，保持既有空卡观感）。"""
+    return max(2, int(displaylines or 0))
 
 
 def acquire_single_instance(name="deepl_quick_singleton"):
@@ -676,19 +721,20 @@ class App:
         self.cache = load_cache()
         self.history = load_history()
         self.msgq = queue.Queue()
-        self.cards = {}                  # target → {"frame","text","status"}
+        self.cards = {}                  # target → {"frame","text","status","pause"}
+        self._paused = set()             # P-020 临时停用的目标语（会话级，不落 config）
         self._langs_cache = None         # 动态语言清单 [(code,name,formality)]
         self._busy = False
         self._drag = None
         self._rs = None
-        self._pressing = False          # 拖动/拉伸中暂停自动折叠（QuadTodo P-004）
+        self._pressing = False          # 拖动/拉伸中暂停自动折叠
         self._pill_mode = False
         self._pill_y = max(0, int(self.cfg.get("pill_y", 120)))
         self._normal_size = (W, H)
         self._pill_w = 34
         self._leave_after = None        # 鼠标离开后的延迟折叠定时器
         self._pill_font = None
-        self._still = (0, 0)            # 折叠瞬间的指针位置：静止点，防弹跳（QuadTodo P-003）
+        self._still = (0, 0)            # 折叠瞬间的指针位置：静止点，防弹跳
         self._auto_after = None
         self._last_usage_fetch = 0.0
         self._icon = None
@@ -719,7 +765,7 @@ class App:
     def _build_ui(self):
         self.root.title(f"deepl-quick v{APP_VERSION}")
         self.root.configure(bg=BG)
-        self.root.overrideredirect(True)     # 无边框（QuadTodo 同款）：拖动/折叠/resize 全自绘
+        self.root.overrideredirect(True)     # 无边框：拖动/折叠/resize 全自绘
         self._make_icon()
 
         # 自绘标题栏：拖动 + 用量徽标 + 钉/设/史/—/✕
@@ -780,7 +826,7 @@ class App:
         self.scroll = ScrollFrame(self.root)
         self.scroll.pack(fill="both", expand=True, padx=12, pady=(6, 0))
 
-        # 贴边药丸（QuadTodo 同款形态）：主内容收起后只剩一枚「译」小胶囊，贴屏幕右缘
+        # 贴边药丸形态：主内容收起后只剩一枚「译」小胶囊，贴屏幕右缘
         self.pill = tk.Frame(self.root, bg=TITLE_BG, cursor="hand2")
         self.lbl_pill = tk.Label(self.pill, text="译", bg=TITLE_BG, fg="white",
                                  font=(FONT, 11, "bold"), cursor="hand2")
@@ -846,7 +892,7 @@ class App:
     def _drag_end(self, _e=None):
         self._pressing = False
 
-    # ---- 贴边药丸（移植 QuadTodo：离开 0.75s 自动折叠、悬停展开、静止不弹跳、拖动/弹窗不折叠）
+    # ---- 贴边药丸（离开 0.75s 自动折叠、悬停展开、静止不弹跳、拖动/弹窗不折叠）
 
     def _dialogs_open(self):
         for w in (self._settings, self._picker, self._history_win):
@@ -892,7 +938,7 @@ class App:
             return
         sw, sh = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
         w, h = self._normal_size
-        x = max(0, sw - w)                   # 展开位固定贴右缘、顶部对齐药丸（QuadTodo P-003）
+        x = max(0, sw - w)                   # 展开位固定贴右缘、顶部对齐药丸
         y = max(0, min(self._pill_y, sh - h))
         self.pill.pack_forget()
         for widget, opts in self._pack_specs:
@@ -928,7 +974,9 @@ class App:
                 self._pill_y = ny
         if self.cfg.get("topmost"):
             try:
-                if not self.root.wm_attributes("-topmost"):
+                # 读真实样式位而非 wm_attributes：外部 SetWindowPos 降级后 Tk 缓存仍报 True
+                # （U-006 补记盲区），纯 Tk 检测在真实降级场景下永不重申
+                if not _is_real_topmost(self.root.winfo_id()):
                     self.root.attributes("-topmost", True)
             except tk.TclError:
                 pass
@@ -981,30 +1029,75 @@ class App:
             c["frame"].destroy()
         self.cards.clear()
         for t in self.cfg["targets"]:
+            paused = t in self._paused
             f = tk.Frame(self.scroll.inner, bg=CARD_BG)
             f.pack(fill="x", pady=3)
             head = tk.Frame(f, bg=CARD_BG)
             head.pack(fill="x")
-            tk.Label(head, text=f"{lang_name(t)}  {t}", bg=CARD_BG, fg="#444444",
+            tk.Label(head, text=f"{lang_name(t)}  {t}", bg=CARD_BG,
+                     fg="#999999" if paused else "#444444",
                      font=(FONT, 9, "bold")).pack(side="left", padx=(8, 0), pady=(4, 0))
-            st = tk.Label(head, text=tr("card_pending"), bg=CARD_BG, fg="#999999", font=(FONT, 8))
+            st = tk.Label(head, text=tr("card_paused") if paused else tr("card_pending"),
+                          bg=CARD_BG, fg="#999999", font=(FONT, 8))
             st.pack(side="left", padx=8)
-            # 头部右缘：「×」移除该目标语（P-015 拍板，接替退役的 chips ×）＋ 复制图标 ⧉。
+            # 头部右缘图标组：「×」移除该目标语（P-015 拍板）／「⏸/▶」临时停用（P-020 拍板）／复制 ⧉。
+            # pack side=right 先 pack 的在最右：代码序 ×、⏸、⧉ ＝ 视觉 ⧉ ⏸ ×。
             # 图标字形雅黑没有，显式用 Segoe UI Symbol（Tk 无字体回退）。
             rm = tk.Label(head, text="×", bg="#ffffff", fg="#b05252", font=(FONT, 10, "bold"),
                           relief="raised", borderwidth=1, padx=6, pady=2, cursor="hand2")
             rm.pack(side="right", padx=(0, 8), pady=(4, 0))
             rm.bind("<Button-1>", lambda e, t=t: self.remove_target(t))
+            pk = tk.Label(head, text="▶" if paused else "⏸", bg="#e4e6e9" if paused else "#ffffff",
+                          fg="#8a94a0", font=("Segoe UI Symbol", 10),
+                          relief="raised", borderwidth=1, padx=7, pady=2, cursor="hand2")
+            pk.pack(side="right", padx=(0, 4), pady=(4, 0))
+            pk.bind("<Button-1>", lambda e, t=t: self.toggle_target(t))
             cp = tk.Label(head, text="⧉", bg="#ffffff", fg=TITLE_BG, font=("Segoe UI Symbol", 10),
                           relief="raised", borderwidth=1, padx=7, pady=2, cursor="hand2")
             cp.pack(side="right", padx=(0, 4), pady=(4, 0))
             cp.bind("<Button-1>", lambda e, t=t: self.copy_one(t))
-            txt = tk.Text(f, height=2, wrap="word", relief="flat", bg="white", fg="#333333",
+            txt = tk.Text(f, height=2, wrap="word", relief="flat",
+                          bg="#efefef" if paused else "white", fg="#aaaaaa" if paused else "#333333",
                           font=(FONT, 10), state="disabled", highlightthickness=0)
             txt.pack(fill="x", padx=8, pady=(2, 6))
             txt.bind("<MouseWheel>", self._card_wheel)   # 卡片上滚轮滚列表，避免双滚动
-            self.cards[t] = {"frame": f, "text": txt, "status": st}
+            # P-019：高度自适应内容——<Configure> 在宽度变化（resize 重排）后再触发重算
+            txt.bind("<Configure>", lambda e, t=t: self._fit_card_text(t))
+            self.cards[t] = {"frame": f, "text": txt, "status": st, "pause": pk}
         self.scroll.refresh()
+        self._update_estimate()
+
+    def _fit_card_text(self, target):
+        """P-019：卡片译文高度自适应内容（displaylines＝折行后的真实显示行数）。"""
+        info = self.cards.get(target)
+        if info is None:
+            return
+        txt = info["text"]
+        try:
+            n = int(txt.tk.call(txt._w, "count", "-displaylines", "1.0", "end-1c"))
+        except (tk.TclError, ValueError, TypeError):
+            return
+        n = card_height_for(n)
+        if int(txt.cget("height")) != n:
+            txt.configure(height=n)
+
+    def toggle_target(self, target):
+        """P-020：临时停用/恢复一门目标语（会话级——清单不丢，重启全恢复；
+        停用者退出本次翻译省额度，旧译文保留置灰、⧉ 仍可复制）。"""
+        paused = target not in self._paused
+        if paused:
+            self._paused.add(target)
+        else:
+            self._paused.discard(target)
+        info = self.cards.get(target)
+        if info is not None:
+            info["pause"].configure(text="▶" if paused else "⏸",
+                                    bg="#e4e6e9" if paused else "#ffffff")
+            info["text"].configure(bg="#efefef" if paused else "white",
+                                   fg="#aaaaaa" if paused else "#333333")
+            self._set_card_status(info, tr("card_paused") if paused else tr("card_pending"),
+                                  "#999999")
+            self.scroll.refresh()
         self._update_estimate()
 
     def _card_wheel(self, e):
@@ -1014,6 +1107,7 @@ class App:
 
     def remove_target(self, target):
         self.cfg["targets"] = [t for t in self.cfg["targets"] if t != target]
+        self._paused.discard(target)
         self.rebuild_cards()
 
     # ---- 翻译主流程
@@ -1034,7 +1128,8 @@ class App:
         if not text:
             self.set_status(tr("status_ready"))
             return
-        n = sum(1 for t in self.cfg["targets"] if cache_key(text, t, self._model_type()) not in self.cache)
+        n = sum(1 for t in active_targets(self.cfg["targets"], self._paused)
+                if cache_key(text, t, self._model_type()) not in self.cache)
         self.set_status(tr("hint_estimate", total=len(text) * n, chars=len(text), langs=n)
                         if n else tr("hint_cache_all"))
 
@@ -1055,14 +1150,16 @@ class App:
             self.set_status(tr("status_need_key"), err=True)
             self.open_settings()
             return
-        targets = list(self.cfg["targets"])
+        targets = active_targets(self.cfg["targets"], self._paused)
         if not targets:
-            self.set_status(tr("status_need_target"), warn=True)
+            self.set_status(tr("status_all_paused") if self.cfg["targets"]
+                            else tr("status_need_target"), warn=True)
             return
         self._busy = True
         self.btn_go.configure(text=tr("btn_translating"), bg="#8a94a0")
-        for c in self.cards.values():
-            self._set_card_status(c, "…", "#999999")
+        for t, c in self.cards.items():
+            if t not in self._paused:            # 停用卡不置「…」（P-020）
+                self._set_card_status(c, "…", "#999999")
         threading.Thread(target=self._worker, args=(text, targets), daemon=True).start()
 
     def _worker(self, text, targets):
@@ -1138,9 +1235,12 @@ class App:
         txt.delete("1.0", "end")
         txt.insert("1.0", text)
         txt.configure(state="disabled")
+        self._fit_card_text(target)          # P-019：内容变化后重算高度
 
     def _on_card_ok(self, target, out, det, billed, cached):
         self._set_card_text(target, out)
+        if target in self._paused:           # 翻译途中被停用：译文照收（置灰），状态保持已暂停
+            return
         if cached:
             self._set_card_status(self.cards[target], tr("card_cached"), OK_FG)
         else:
@@ -1151,8 +1251,10 @@ class App:
         self.scroll.refresh()
 
     def _on_card_err(self, target, msg):
-        self._set_card_status(self.cards[target], tr("card_failed"), ERR_FG)
         self._set_card_text(target, msg)
+        if target in self._paused:
+            return                            # 途中被停用：错误文案照收，状态保持已暂停
+        self._set_card_status(self.cards[target], tr("card_failed"), ERR_FG)
         self.scroll.refresh()
 
     def _on_quota(self, target, msg):
@@ -1204,7 +1306,7 @@ class App:
         # 药丸只在用量告急（≥80%）时长出百分比徽标，平时保持一粒「译」
         badge = f"{pct}%" if (limit and pct >= 80) else ""
         self.lbl_pill_usage.configure(text=badge, fg="#f39c12" if pct < 95 else "#e67e22")
-        if self._pill_mode and badge:                # 宽度自适应（QuadTodo P-002）
+        if self._pill_mode and badge:                # 宽度自适应
             self._pill_w = self._pill_w_now()
             sw = self.root.winfo_screenwidth()
             self.root.geometry(f"{self._pill_w}x{PILL_H}+{sw - self._pill_w}+{self._pill_y}")
@@ -1224,7 +1326,7 @@ class App:
 
     def copy_all(self):
         results = [(t, self.cards[t]["text"].get("1.0", "end-1c").strip())
-                   for t in self.cfg["targets"]]
+                   for t in active_targets(self.cfg["targets"], self._paused)]
         text = format_copy_all(results)
         if text:
             self._copy(text)
@@ -1251,11 +1353,12 @@ class App:
         win.configure(bg=BG)
         win.resizable(False, False)
         win.transient(self.root)
-        # 500 宽：v0.3 起六个 mini 按钮改两行——英文文案更宽，单行会把「关闭」挤成 1px
+        # 580 宽：v0.3 起六个 mini 按钮改两行——英文文案更宽，单行会把「关闭」挤成 1px
         #（P-009 同族，en 弹窗实测抓出；两行布局对任何语言都稳）。高度随内容放大：
         # v0.3.4 隐私区加两勾选（544→600），v0.3.6 实测 DPIAware 下 7 勾选+两行按钮
-        # 总需求 ≈735，600/640/720/740 都装不下（en 提示文案折三行多 ~15px，740 时第二行按钮仍被裁）——放至 756
-        self._center(win, 500, 756)
+        # 总需求 ≈735——放至 756。v0.3.7 加宽 500→580（P-018 残留收尾）：en 勾选框文案
+        # 曾超 500 右缘截断，统一加宽双语受益（提示行 wraplength 同步 466→546）
+        self._center(win, 580, 756)
 
         row = tk.Frame(win, bg=BG)
         row.pack(fill="x", padx=14, pady=(14, 4))
@@ -1269,7 +1372,7 @@ class App:
                                 highlightcolor=TITLE_BG)
         self.ent_key.pack(fill="x", padx=14, pady=(2, 4))
         tk.Label(win, text=tr("settings_key_hint"),
-                 bg=BG, fg="#999999", font=(FONT, 8), wraplength=466, justify="left"
+                 bg=BG, fg="#999999", font=(FONT, 8), wraplength=546, justify="left"
                  ).pack(fill="x", padx=14)
 
         hr = tk.Frame(win, bg=BG)
@@ -1485,6 +1588,7 @@ class App:
                 if c not in order:
                     order.append(c)
             self.cfg["targets"] = order
+            self._paused &= set(order)       # 清单里已删的语种，停用记录一并清掉
             self.rebuild_cards()
             win.destroy()
 
@@ -1789,6 +1893,14 @@ def run_smoke():
     check("clamp right/bottom edge", _clamp_xy(5000, 800, 400, 600, 1920, 1080) == (1520, 480))
     check("clamp negative", _clamp_xy(-50, -20, 400, 600, 1920, 1080) == (0, 0))
     check("clamp oversized window", _clamp_xy(100, 100, 2000, 1200, 1920, 1080) == (0, 0))
+
+    # 19 v0.3.7：topmost 真实样式位（U-006 盲区修复）+ P-019 卡片高度 + P-020 停用过滤
+    check("real topmost invalid hwnd", _is_real_topmost(0) is False and _is_real_topmost(None) is False)
+    check("card height floor", card_height_for(0) == 2 and card_height_for(1) == 2
+          and card_height_for(5) == 5 and card_height_for(120) == 120)
+    check("active targets filter", active_targets(["EN", "JA", "ZH"], {"ZH"}) == ["EN", "JA"]
+          and active_targets(["EN", "JA"], {"EN", "JA"}) == []
+          and active_targets(["EN"], set()) == ["EN"])
 
     passed = sum(1 for _n, ok in results if ok)
     for name, ok in results:

@@ -3,6 +3,19 @@
 All notable changes to deepl-quick are documented here.
 本文件记录 deepl-quick 的全部重要变更。
 
+## v0.3.7 — 2026-11-16
+
+- **Long translations are fully visible now**: result cards auto-fit their height to the translated text (rewrapping on window resize) instead of clipping to two fixed lines — previously there was no way to see the rest of a longer translation at all.
+  **长译文完整可见**：结果卡片高度随译文自适应（窗口缩放后重排）——旧版固定两行，长译文被硬截断且无任何途径查看剩余内容。
+- New **temporary pause button** on each card (⏸ / ▶): pause a language for this round to save quota, restore with one click — the pinned list itself never changes, and re-translating after resuming hits the cache at zero cost. Pause state is session-only; all-paused shows a hint instead of firing requests.
+  卡片新增**临时停用按钮**（⏸ / ▶）：让某门语言本次不参与翻译以节省字符额度，一键恢复——常驻清单不动，恢复后重翻走缓存零消耗。停用态仅本会话有效；全部停用时空转提示、不发请求。
+- Settings dialog widened 500→580: English checkbox labels no longer clip at the right edge (longest label now point-asserted via font metrics in the headless probe); the "Auto-translate" label was tightened on both UI languages.
+  设置弹窗加宽 500→580：英文勾选框文案不再被右缘截断（探针新增 font.metrics 点名断言）；「自动翻译」勾选文案中英同步精简。
+- Fixed: the always-on-top self-heal read Tk's internal cache, which never notices when an external program demotes the window style via Win32 — it now reads the real window style bits (GetWindowLongW / WS_EX_TOPMOST) and re-asserts for real. A headless probe reproduces the external demotion and verifies recovery within two poll beats.
+  修复：置顶自愈此前读 Tk 内部缓存——外部程序经 Win32 直接降级时永不触发重申；现在读取真实窗口样式位（GetWindowLongW / WS_EX_TOPMOST）。无头探针复现真实外部降级并验证两拍内自愈。
+- Verified: smoke 56/56, headless probe 117/117 (point-named assertions for ⧉/⏸/× per card, pause/resume wiring, offline partial-pause end-to-end, dialog checkboxes/radios at zh/en).
+  验证：smoke 56/56，无头探针 117/117（逐卡点名 ⧉/⏸/×、停用/恢复接线、离线部分停用端到端、双语弹窗勾选框/单选行断言）。
+
 ## v0.3.6 — 2026-11-15
 
 - Title-bar hardening: growing version strings plus the usage badge could crush the last title-bar button to invisibility; the window title now truncates gracefully instead, and the title/usage fonts stepped down one size to fit.
