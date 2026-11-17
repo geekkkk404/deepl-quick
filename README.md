@@ -10,9 +10,9 @@
   平时缩成一枚胶囊&nbsp;<img src="assets/pill.png" alt="pill" width="39">&nbsp;，悬停即展开 —— 看不懂 → 拿走译文，呼吸之间
 </p>
 
-![release](https://img.shields.io/github/v/release/geekkkk404/deepl-quick) ![python](https://img.shields.io/badge/Python-3.8%2B-306998) ![platform](https://img.shields.io/badge/Windows-10%20%2F%2011-0078d4) ![license](https://img.shields.io/badge/License-MIT-27ae60) ![selftest](https://img.shields.io/badge/self--test-56%20passing-27ae60)
+![release](https://img.shields.io/github/v/release/geekkkk404/deepl-quick) ![python](https://img.shields.io/badge/Python-3.8%2B-306998) ![platform](https://img.shields.io/badge/Windows-10%20%2F%2011-0078d4) ![license](https://img.shields.io/badge/License-MIT-27ae60) ![selftest](https://img.shields.io/badge/self--test-77%20passing-27ae60)
 
-当前版本：**v0.3.7** ・ License：[MIT](LICENSE)
+当前版本：**v0.3.8** ・ License：[MIT](LICENSE)
 
 [中文](#-中文) ・ [English](#english)
 
@@ -34,6 +34,7 @@
 
 - **贴边药丸常驻**：鼠标离开约 0.75s 自动折叠成 39×30 胶囊，悬停展开、静止不弹跳、拖动中不折叠；窗口位置与药丸位置均有记忆；后台轮询自动重申置顶并把窗口夹回屏内（分辨率变化 / 睡眠唤醒 / RDP 重连自愈），运行痕迹落 `%TEMP%\dq_exit.log` 可事后排查
 - **开机自启（可选）**：设置弹窗勾选即写 HKCU Run 键（免管理员），登录后直接缩成贴边药丸；Windows 任务管理器「启动应用」可随时停用；自带单实例保护，不会叠出两枚药丸
+- **看门狗保活（可选）**：设置勾选即注册 Windows 计划任务（免管理员），进程意外死亡（如待机转换中被外部硬杀）后自动拉起——每 30 分钟兜底 + 待机唤醒即时检查；主动 ✕ 关闭不会被拉活（尊重用户意图）；任务在「任务计划程序」的 `\deepl-quick\watchdog` 透明可见，取消勾选即注销；拉活判据复用取证日志（`exit: clean` = 用户关闭，不拉活）
 - **自动检测源语言**：无需选择源语言，DeepL 返回检测结果并显示在界面上
 - **常驻目标语言**：默认英/日/中，可从完整语言清单勾选（上限 16 个）；清单支持在线刷新（DeepL 现已支持 111 门目标语言），DeepL 新增语言不用升级本工具；语言名以原生名显示（日本語 / Deutsch / Français…）；已选语言即结果卡片列表本身，点卡片头部「×」移除、「⏸」临时停用（本次不翻译、不扣额度，点「▶」恢复，清单不丢）
 - **界面多语言**：界面自动跟随 Windows 系统语言（中文 / English），可在设置中强制指定，切换即时生效
@@ -65,7 +66,7 @@
 | 增删常驻语言 | 「＋语言」勾选；卡片头部「×」移除 |
 | 临时停用某语言（省额度） | 卡片头部「⏸」停用、「▶」恢复（仅本会话有效） |
 | 历史 | 标题栏「史」，双击条目回填原文 |
-| 设置（key / 高质量模式 / 历史开关 / host / 开机自启 / 界面语言） | 标题栏「设」 |
+| 设置（key / 高质量模式 / 历史开关 / host / 开机自启 / 看门狗保活 / 界面语言） | 标题栏「设」 |
 | 折叠 / 展开 | 标题栏「—」；或鼠标离开 / 悬停自动 |
 | 拖动 / 调整大小 | 拖标题栏；右下角「◢」 |
 | 置顶开关 | 标题栏「钉」（绿=开） |
@@ -98,7 +99,7 @@
 python deepl_quick.pyw --smoke
 ```
 
-56 项自检全部离线运行（数据文件重定向到临时目录、注册表读写走 scratch 键，不发任何网络请求）。
+77 项自检全部离线运行（数据文件重定向到临时目录、注册表读写走 scratch 键、计划任务 roundtrip 走 scratch 任务名且不武装触发器，不发任何网络请求）。
 
 ### License
 
@@ -120,6 +121,7 @@ python deepl_quick.pyw --smoke
 
 - **Edge pill, always resident** — auto-collapses (~0.75s) to a 39×30 pill when the mouse leaves; hover to expand; no bounce while idle, no collapse while dragging; both window and pill positions are remembered; the background poll re-asserts always-on-top and keeps the window inside the screen (self-heals after resolution changes / sleep-resume / RDP reconnects); runtime trace goes to `%TEMP%\dq_exit.log` for post-mortem checks
 - **Optional auto-start** — tick it in settings to register an HKCU Run key (no admin needed); the pill docks itself at login; disable anytime from Task Manager → Startup apps; single-instance guard included
+- **Keep-alive watchdog (optional)** — tick it in settings to register a Windows scheduled task (no admin needed); after an unexpected process death (e.g., hard-killed during a power transition) the pill is revived automatically — a 30-minute safety net plus an instant check on standby resume; deliberately closing the window (✕) is respected and never revived; the task is visible and removable in Task Scheduler under `\deepl-quick\watchdog`; the revive decision reuses the forensic log (`exit: clean` = user closed → don't revive)
 - **Auto source detection** — no language picking; DeepL returns the detected language and the UI shows it
 - **Pinned target languages** — EN/JA/ZH by default, pick from the full language list (up to 16); the list can be refreshed online (DeepL currently serves 111 target languages), so new DeepL languages appear without upgrading this tool; languages are shown by their native names (日本語 / Deutsch / Français…); the card list itself shows which languages are pinned — temporarily pause one with "⏸" on its card header (skipped this round, costs nothing; "▶" restores it, the pinned list never changes), remove with "×"
 - **Multilingual UI** — the interface follows your Windows system language (Chinese / English), and can be pinned to either in Settings; switching applies instantly
@@ -169,7 +171,7 @@ Usage is counted in **source characters**: translating one text into 3 languages
 python deepl_quick.pyw --smoke
 ```
 
-56 offline checks (data files go to a temp directory, registry writes go to a scratch key; no network requests).
+77 offline checks (data files go to a temp directory, registry writes go to a scratch key, the scheduled-task roundtrip uses a scratch task name without arming triggers; no network requests).
 
 ### License
 

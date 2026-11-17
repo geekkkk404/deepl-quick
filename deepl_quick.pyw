@@ -3,7 +3,8 @@
 数据纯本地（脚本同目录 config.json / cache.json / history.json；密钥独立存 .deepl-key，绝不入库）。
 额度纪律：缓存优先（命中零调用）、默认手动触发（Ctrl+Enter）、456 额度耗尽绝不重试、429/529 退避重试。
 用法：双击运行；`python deepl_quick.pyw --smoke` 为自检模式（重定向数据文件到临时目录、不发网络请求）；
-`--minimized` 启动即缩成贴边药丸（开机自启命令自带此参数，开关在设置弹窗）。
+`--minimized` 启动即缩成贴边药丸（开机自启命令自带此参数，开关在设置弹窗）；
+`--watchdog-check` 为看门狗短命检查模式（计划任务触发：判活→读取证日志→该拉就拉→即退，开关在设置弹窗）。
 界面语言默认跟随 Windows 系统（可强制 中文/English，设置弹窗切换，即时生效）。
 """
 import ctypes
@@ -11,6 +12,7 @@ import hashlib
 import json
 import os
 import queue
+import subprocess
 import sys
 import tempfile
 import threading
@@ -24,7 +26,7 @@ import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import messagebox
 
-APP_VERSION = "0.3.7"
+APP_VERSION = "0.3.8"
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE = os.path.join(APP_DIR, "config.json")
@@ -43,6 +45,9 @@ TARGETS_MAX = 16                           # 常驻目标语上限（防卡片�
 RUN_KEY_PATH = r"Software\Microsoft\Windows\CurrentVersion\Run"  # 开机自启落点（HKCU，免管理员）
 AUTOSTART_NAME = "deepl-quick"             # Run 键值名（任务管理器「启动应用」页显示这个名字）
 CRASH_LOG = os.path.join(tempfile.gettempdir(), "dq_exit.log")   # 取证日志（U-006 方案 A）
+SINGLE_INSTANCE_MUTEX = "deepl_quick_singleton"                  # 防双开互斥名（判活也用它——U-007）
+WATCHDOG_TASK_NAME = r"\deepl-quick\watchdog"                    # 计划任务路径（任务计划程序可见，透明）
+WATCHDOG_INTERVAL_MIN = 30                                       # 周期兜底检查间隔（分钟）
 
 
 def _crashlog(msg):
@@ -101,6 +106,7 @@ DEFAULT_CONFIG = {
     "topmost": True,
     "host_mode": "auto",          # auto / free / pro
     "ui_lang": "auto",            # auto / zh / en —— 界面语言（U-005；auto 跟随系统 UI 语言）
+    "watchdog_enabled": False,    # U-007 看门狗保活：默认关（勾选即知情同意），登记计划任务
 }
 
 
@@ -159,6 +165,12 @@ STRINGS_ZH = {
     "chk_autostart": "开机自启（登录后缩成右缘药丸）",
     "chk_clear_cache": "重启时清空翻译缓存（隐私）",
     "chk_clear_history": "重启时清空历史记录（隐私）",
+    "chk_watchdog": "看门狗保活（进程意外死亡后自动拉起）",
+    "wd_state_line": "看门狗任务：{state}",
+    "wd_registered": "已注册（每 30 分钟/待机唤醒时检查）",
+    "wd_missing": "未注册",
+    "wd_unknown": "查询失败",
+    "status_watchdog_fail": "已保存，但看门狗任务写入失败：{e}",
     "btn_save": "保存设置",
     "btn_delete_key": "删除 key",
     "btn_clear_history": "清空历史",
@@ -249,6 +261,12 @@ STRINGS_EN = {
     "chk_autostart": "Start with Windows (login shows the edge pill)",
     "chk_clear_cache": "Clear translation cache on restart (privacy)",
     "chk_clear_history": "Clear history on restart (privacy)",
+    "chk_watchdog": "Keep-alive watchdog (auto-restart after unexpected death)",
+    "wd_state_line": "Watchdog task: {state}",
+    "wd_registered": "registered (checks every 30 min and after standby resume)",
+    "wd_missing": "not registered",
+    "wd_unknown": "query failed",
+    "status_watchdog_fail": "Saved, but writing the watchdog task failed: {e}",
     "btn_save": "Save",
     "btn_delete_key": "Delete key",
     "btn_clear_history": "Clear history",
@@ -463,6 +481,207 @@ def autostart_disable(key_path=RUN_KEY_PATH):
         pass
 
 
+# ---------------------------------------------------------------- 看门狗保活（U-007：OS 调度短命检查进程）
+# 两份死亡证据（2026-11-15/11-17 尸检）都指向「待机转换窗口内被外部硬杀」——
+# 防死做不到（TerminateProcess 不给进程反应机会），只能死后快速复活。看门狗不设
+# 常驻进程：计划任务每次触发临时起一个 --watchdog-check 实例，判活→读取证日志→
+# 该拉就拉→即退（秒级）。自身保活交给 OS 调度——检查进程被杀也无所谓，调度权在
+# Windows 手里，下个周期照常再跑，「谁看门看门狗」的递归在 OS 层终结。
+
+# 待机唤醒事件（Kernel-Power 507=退出连接待机）触发器；Subscription 内嵌 XML 须转义
+WD_EVENT_QUERY = "*[System[Provider[@Name='Microsoft-Windows-Kernel-Power'] and (EventID=507)]]"
+WD_SUBSCRIPTION_ESCAPED = (
+    '&lt;QueryList&gt;&lt;Query Id="0" Path="System"&gt;'
+    '&lt;Select Path="System"&gt;' + WD_EVENT_QUERY + '&lt;/Select&gt;&lt;/Query&gt;&lt;/QueryList&gt;'
+)
+
+
+def _watchdog_paths():
+    """(exe, script)：pythonw 优先（免控制台闪现）；frozen 打包时 exe 即一切、script 为空。
+    脚本路径取 __file__ 而非 sys.argv[0]——E2E 实测教训（U-007）：从任何导入方（探针/宿主
+    进程）调用注册时 argv[0] 是调用方路径，任务动作会指错目标。"""
+    if getattr(sys, "frozen", False):
+        return sys.executable, ""
+    exe = sys.executable
+    pyw = os.path.join(os.path.dirname(exe), "pythonw.exe")
+    if os.path.basename(exe).lower() != "pythonw.exe" and os.path.exists(pyw):
+        exe = pyw
+    return exe, os.path.abspath(__file__)
+
+
+def _watchdog_cmd():
+    exe, script = _watchdog_paths()
+    if script:
+        return f'"{exe}" "{script}" --watchdog-check'
+    return f'"{exe}" --watchdog-check'
+
+
+def _watchdog_task_xml(start=None, arm_triggers=True):
+    """计划任务定义 XML（现拼免外部文件）。
+    触发器=每 30 分钟周期兜底 + 待机唤醒事件（507）即时检查；登录场景由既有 HKCU
+    Run 自启承担（双触发会在登录瞬间三实例竞态——U-007 拍板不重复注册）。
+    arm_triggers=False 仅供 smoke 的 roundtrip 用：只验注册/查询/注销链路，不武装
+    真实触发器，保证自检零副作用（不拉活、不占调度）。"""
+    exe, script = _watchdog_paths()
+    args = f'"{script}" --watchdog-check' if script else "--watchdog-check"
+    start = start or datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    triggers = ""
+    if arm_triggers:
+        triggers = f'''    <TimeTrigger>
+      <StartBoundary>{start}</StartBoundary>
+      <Enabled>true</Enabled>
+      <Repetition>
+        <Interval>PT{WATCHDOG_INTERVAL_MIN}M</Interval>
+        <StopAtDurationEnd>false</StopAtDurationEnd>
+      </Repetition>
+    </TimeTrigger>
+    <EventTrigger>
+      <Enabled>true</Enabled>
+      <Subscription>{WD_SUBSCRIPTION_ESCAPED}</Subscription>
+    </EventTrigger>
+'''
+    return f'''<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>deepl-quick watchdog: revive after silent process death; skips revive when the last exit was clean (user closed)</Description>
+    <URI>/deepl-quick/watchdog</URI>
+  </RegistrationInfo>
+  <Triggers>
+{triggers}  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <LogonType>InteractiveToken</LogonType>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
+    <WakeToRun>false</WakeToRun>
+    <ExecutionTimeLimit>PT2M</ExecutionTimeLimit>
+    <Priority>7</Priority>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>{exe}</Command>
+      <Arguments>{args}</Arguments>
+    </Exec>
+  </Actions>
+</Task>
+'''
+
+
+def _schtasks(args):
+    """schtasks 子进程封装：失败抛 RuntimeError（rc+输出摘要）。输出仅进错误信息，不进 UI
+    正常路径；解码用 mbcs（schtasks 输出走控制台 ANSI 代码页——账本「两端编码都要显式」同族）。"""
+    try:
+        p = subprocess.run(["schtasks"] + args, capture_output=True)
+    except OSError as e:
+        raise RuntimeError(f"schtasks spawn failed: {e}")
+    if p.returncode != 0:
+        detail = (p.stderr or b"").strip() or (p.stdout or b"").strip()
+        raise RuntimeError(f"schtasks {' '.join(args)} exit {p.returncode}: "
+                           f"{detail.decode('mbcs', errors='replace')[:200]}")
+
+
+def watchdog_task_registered(task_name=WATCHDOG_TASK_NAME):
+    try:
+        _schtasks(["/query", "/tn", task_name])
+        return True
+    except RuntimeError:
+        return False
+
+
+def watchdog_task_enable(task_name=WATCHDOG_TASK_NAME, arm_triggers=True):
+    """upsert：XML 落临时文件（UTF-16 带 BOM，schtasks 要求）→ /f 覆盖注册（幂等）。
+    动作指向当前 pythonw+脚本，仓库移动后重存一次设置即自愈（同自启 upsert 语义）。"""
+    xml = _watchdog_task_xml(arm_triggers=arm_triggers)
+    fd, tmp = tempfile.mkstemp(suffix=".xml")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-16") as f:
+            f.write(xml)
+        _schtasks(["/create", "/f", "/tn", task_name, "/xml", tmp])
+    finally:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+
+
+def watchdog_task_disable(task_name=WATCHDOG_TASK_NAME):
+    """幂等：任务不存在时静默成功（空目录 \\deepl-quick 残留无害，任务计划程序里可见）。"""
+    try:
+        _schtasks(["/delete", "/f", "/tn", task_name])
+    except RuntimeError:
+        pass
+
+
+def _log_tail_app_line(path=None):
+    """取证日志末条「应用写的行」（wd-check 审计行不是状态，跳过）；无日志/全空 → None。
+    path=None 延迟到调用时解析 CRASH_LOG——默认参数会在模块加载时绑死原路径，
+    smoke 的临时目录重定向就失效了（自检纪律）。"""
+    if path is None:
+        path = CRASH_LOG
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            lines = [ln.strip() for ln in f if ln.strip()]
+    except OSError:
+        return None
+    for ln in reversed(lines):
+        if "wd-check" not in ln:
+            return ln
+    return None
+
+
+def wd_should_revive(tail):
+    """纯函数：末条应用行决定复活意图。exit: clean = 用户主动 ✕，尊重不拉活；
+    其余（startup / startup (revived) / FATAL / exit: mutex / 无日志）= 他杀或未知，拉活。"""
+    if not tail:
+        return True
+    return "exit: clean" not in tail
+
+
+def _instance_alive(name=SINGLE_INSTANCE_MUTEX):
+    """试创互斥判活：ERROR_ALREADY_EXISTS=183 → 有活实例。成功=无实例（句柄立即关闭，
+    让位给随后复活的实例）。fail-closed：句柄拿不到当「活着」，绝不误拉。"""
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    handle = k32.CreateMutexW(None, False, name)
+    if not handle:
+        return True
+    alive = ctypes.get_last_error() == 183
+    k32.CloseHandle(handle)
+    return alive
+
+
+def _watchdog_revive():
+    """拉活。CREATE_BREAKAWAY_FROM_JOB 优先：计划任务给实例配作业对象，分离后复活体
+    不随任务收尾连坐；作业拒绝分离（ACCESS_DENIED）时退回普通 Popen（任务正常完成
+    本就不杀子进程，实测为准，见 U-007 验收）。pythonw 无窗口，两秒后父进程即退。"""
+    exe, script = _watchdog_paths()
+    cmd = [exe, "--minimized", "--revived"] if not script else [exe, script, "--minimized", "--revived"]
+    try:
+        subprocess.Popen(cmd, creationflags=subprocess.CREATE_BREAKAWAY_FROM_JOB)
+    except OSError:
+        subprocess.Popen(cmd)
+
+
+def run_watchdog_check():
+    """看门狗短命模式：由计划任务触发，判活 → 读取证日志末行 → 该拉就拉 → 即退。
+    注意本进程不写普通 startup 行（会污染末行判据），只写 wd-check 审计行。"""
+    if _instance_alive():
+        return 0
+    tail = _log_tail_app_line()
+    if not wd_should_revive(tail):
+        _crashlog("wd-check: skip (user closed)")
+        return 0
+    _crashlog(f"wd-check: revive (tail={tail})")
+    _watchdog_revive()
+    return 0
+
+
 # topmost 真实样式位检测（U-006 补记盲区修复）：Tk 的 wm_attributes("-topmost")
 # 返回内部缓存，外部程序经 Win32 SetWindowPos 直接降级后仍报 True，纯 Tk 检测
 # 永不触发重申——必须问系统本人。argtypes 显式声明：不设时句柄/负值常量按
@@ -504,7 +723,7 @@ def card_height_for(displaylines):
     return max(2, int(displaylines or 0))
 
 
-def acquire_single_instance(name="deepl_quick_singleton"):
+def acquire_single_instance(name=SINGLE_INSTANCE_MUTEX):
     """防双开：自启药丸常驻时再手动双击，右缘会叠出两枚胶囊。成功分支的互斥句柄
     刻意随进程存活不关闭；互斥创建失败宁可放行也不拦启动（fail-open）。"""
     k32 = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -751,6 +970,20 @@ class App:
         self._refresh_usage_async(force=True)
         self.set_status(tr("app_ready_hint") if self.key
                         else tr("app_ready_nokey"))
+        self._watchdog_selfheal()
+
+    def _watchdog_selfheal(self):
+        """U-007 自愈一致性：config 开但任务不在（用户在任务计划程序手删/换机搬运）→
+        静默补注册。只在勾过看门狗时才查（默认关 = 零子进程开销）；失败仅落取证日志，
+        绝不影响主窗。"""
+        if not self.cfg.get("watchdog_enabled"):
+            return
+        try:
+            if not watchdog_task_registered():
+                watchdog_task_enable()
+                _crashlog("watchdog: task re-registered (self-heal)")
+        except Exception as e:
+            _crashlog(f"watchdog: self-heal failed: {e}")
 
     # ---- 窗口骨架
 
@@ -1341,7 +1574,26 @@ class App:
         win.update_idletasks()
         x = self.root.winfo_x() + (self.root.winfo_width() - w) // 2
         y = self.root.winfo_y() + (self.root.winfo_height() - h) // 2
-        win.geometry(f"{w}x{h}+{max(x, 0)}+{max(y, 0)}")
+        # 相对主窗居中后，整体夹回当前屏幕内（v0.3.8：矮屏 768 下弹窗 756 曾裁底 68px——
+        # 主窗被自愈钳到 y≈148，相对居中算出 y=80，底部按钮行出屏）。
+        sw = self.root.winfo_screenwidth()
+        sh = self.root.winfo_screenheight()
+        x = max(0, min(x, sw - w))
+        y = max(0, min(y, sh - h))
+        win.geometry(f"{w}x{h}+{x}+{y}")
+        # 首拍钳制按内容高度算，但 Toplevel 外框还有标题栏等装饰（映射后才可实测，
+        # 探针实测 ≈31px）——Map 后按外框真实占地再钳一拍。收敛式设计：与 Tk geometry
+        # 怪癖（首 call 被吞）同族，持续为真的越界条件靠重发自愈（账本 U-006 工艺）。
+        def _reclamp(_e=None):
+            if not win.winfo_exists():
+                return
+            dx = max(0, win.winfo_rootx() - win.winfo_x())
+            dy = max(0, win.winfo_rooty() - win.winfo_y())
+            cx = max(0, min(win.winfo_x(), sw - w - dx))
+            cy = max(0, min(win.winfo_y(), sh - h - dy))
+            if (cx, cy) != (win.winfo_x(), win.winfo_y()):
+                win.geometry(f"{w}x{h}+{cx}+{cy}")
+        win.bind("<Map>", _reclamp)
 
     def open_settings(self):
         if self._settings is not None and self._settings.winfo_exists():
@@ -1355,13 +1607,15 @@ class App:
         win.transient(self.root)
         # 580 宽：v0.3 起六个 mini 按钮改两行——英文文案更宽，单行会把「关闭」挤成 1px
         #（P-009 同族，en 弹窗实测抓出；两行布局对任何语言都稳）。高度随内容放大：
-        # v0.3.4 隐私区加两勾选（544→600），v0.3.6 实测 DPIAware 下 7 勾选+两行按钮
-        # 总需求 ≈735——放至 756。v0.3.7 加宽 500→580（P-018 残留收尾）：en 勾选框文案
-        # 曾超 500 右缘截断，统一加宽双语受益（提示行 wraplength 同步 466→546）
-        self._center(win, 580, 756)
+        # v0.3.4 隐私区加两勾选（544→600），v0.3.6 高 DPI 实测 7 勾选+两行按钮 ≈735——放至 756；
+        # v0.3.7 加宽 500→580（P-018 收尾）；v0.3.8 加第 8 勾选（看门狗）+状态行（+44px），
+        # 收紧四处分节 padding（-28px）对冲。756 是高 DPI 内容地板不是矮屏许可——矮屏
+        # （768，外框还要吃 ≈31px 标题栏）下自适应收缩，探针实测 100%DPI 内容仅需 ≈600。
+        dh = min(756, max(560, self.root.winfo_screenheight() - 36))
+        self._center(win, 580, dh)
 
         row = tk.Frame(win, bg=BG)
-        row.pack(fill="x", padx=14, pady=(14, 4))
+        row.pack(fill="x", padx=14, pady=(10, 2))
         tk.Label(row, text="DeepL API Key", bg=BG, fg="#333333",
                  font=(FONT, 10, "bold")).pack(anchor="w")
         self.lbl_key_state = tk.Label(row, text=key_masked(self.key), bg=BG, fg="#666666",
@@ -1376,7 +1630,7 @@ class App:
                  ).pack(fill="x", padx=14)
 
         hr = tk.Frame(win, bg=BG)
-        hr.pack(fill="x", padx=14, pady=(10, 0))
+        hr.pack(fill="x", padx=14, pady=(6, 0))
         tk.Label(hr, text="host", bg=BG, fg="#333333", font=(FONT, 10, "bold")).pack(anchor="w")
         self.var_host = tk.StringVar(value=self.cfg.get("host_mode", "auto"))
         hrow = tk.Frame(win, bg=BG)
@@ -1386,7 +1640,7 @@ class App:
                            bg=BG, font=(FONT, 9)).pack(side="left", padx=(0, 10))
 
         hr2 = tk.Frame(win, bg=BG)
-        hr2.pack(fill="x", padx=14, pady=(10, 0))
+        hr2.pack(fill="x", padx=14, pady=(6, 0))
         tk.Label(hr2, text=tr("sec_behavior"), bg=BG, fg="#333333", font=(FONT, 10, "bold")).pack(anchor="w")
         self.var_hist = tk.BooleanVar(value=bool(self.cfg.get("save_history")))
         self.var_quality = tk.BooleanVar(value=bool(self.cfg.get("model_quality")))
@@ -1395,6 +1649,7 @@ class App:
         self.var_autostart = tk.BooleanVar(value=autostart_enabled())  # 唯一事实源=注册表，不落 config.json
         self.var_clear_cache = tk.BooleanVar(value=bool(self.cfg.get("clear_cache_on_exit")))
         self.var_clear_history = tk.BooleanVar(value=bool(self.cfg.get("clear_history_on_exit")))
+        self.var_wd = tk.BooleanVar(value=bool(self.cfg.get("watchdog_enabled")))
         for label, var, tip in (
                 (tr("chk_history"), self.var_hist, ""),
                 (tr("chk_quality"), self.var_quality, ""),
@@ -1402,12 +1657,22 @@ class App:
                 (tr("chk_topmost"), self.var_top, ""),
                 (tr("chk_autostart"), self.var_autostart, ""),
                 (tr("chk_clear_cache"), self.var_clear_cache, ""),
-                (tr("chk_clear_history"), self.var_clear_history, "")):
+                (tr("chk_clear_history"), self.var_clear_history, ""),
+                (tr("chk_watchdog"), self.var_wd, "")):
             tk.Checkbutton(win, text=label, variable=var, bg=BG, font=(FONT, 10),
                            anchor="w").pack(fill="x", padx=14)
+        # 看门狗任务实时状态：打开弹窗时真查任务计划程序（唯一事实源=系统，不信任 config 纸面值）
+        try:
+            wd_state = tr("wd_registered") if watchdog_task_registered() else tr("wd_missing")
+        except Exception:
+            wd_state = tr("wd_unknown")
+        self.lbl_wd_state = tk.Label(win, text=tr("wd_state_line", state=wd_state),
+                                     bg=BG, fg="#999999", font=(FONT, 8),
+                                     wraplength=546, justify="left", anchor="w")
+        self.lbl_wd_state.pack(fill="x", padx=24)
 
         hr3 = tk.Frame(win, bg=BG)
-        hr3.pack(fill="x", padx=14, pady=(10, 0))
+        hr3.pack(fill="x", padx=14, pady=(6, 0))
         tk.Label(hr3, text=tr("sec_ui_lang"), bg=BG, fg="#333333",
                  font=(FONT, 10, "bold")).pack(anchor="w")
         self.var_ui = tk.StringVar(value=self.cfg.get("ui_lang", "auto"))
@@ -1418,7 +1683,7 @@ class App:
                            bg=BG, font=(FONT, 9)).pack(side="left", padx=(0, 10))
 
         btns = tk.Frame(win, bg=BG)
-        btns.pack(fill="x", padx=14, pady=(12, 14))
+        btns.pack(fill="x", padx=14, pady=(10, 10))
         r1 = tk.Frame(btns, bg=BG)
         r1.pack(fill="x")
         r2 = tk.Frame(btns, bg=BG)
@@ -1449,6 +1714,7 @@ class App:
         self.cfg["clear_history_on_exit"] = bool(self.var_clear_history.get())
         self.cfg["host_mode"] = self.var_host.get()
         self.cfg["ui_lang"] = self.var_ui.get()
+        self.cfg["watchdog_enabled"] = bool(self.var_wd.get())
         save_config_file(self.cfg)
         self.root.attributes("-topmost", bool(self.cfg["topmost"]))
         self._update_pin()
@@ -1458,6 +1724,14 @@ class App:
                 (autostart_enable if self.var_autostart.get() else autostart_disable)()
         except OSError as e:
             _as_err = e          # 留到弹窗关闭后统一报，免被「设置已保存」覆盖
+        _wd_err = None           # 看门狗开关落系统：勾=upsert 注册，不勾=注销（均幂等）；
+        try:                     # 勾着重存一次设置也安全（兼当仓库移动后的自愈入口）
+            if self.var_wd.get():
+                watchdog_task_enable()
+            else:
+                watchdog_task_disable()
+        except Exception as e:
+            _wd_err = e
         new_lang = resolve_ui_lang(self.cfg.get("ui_lang", "auto"))
         lang_switched = new_lang != _UI_LANG
         if lang_switched:
@@ -1468,10 +1742,13 @@ class App:
         self._refresh_usage_async(force=True)
         if self._settings is not None and self._settings.winfo_exists():
             self._settings.destroy()
-        if _as_err is None:
+        if _as_err is None and _wd_err is None:
             self.set_status(tr("status_ui_lang_switched") if lang_switched else tr("status_settings_saved"))
         else:
-            self.set_status(tr("status_autostart_fail", e=_as_err), err=True)
+            msg = tr("status_autostart_fail", e=_as_err) if _as_err else ""
+            if _wd_err is not None:
+                msg = (msg + " " if msg else "") + tr("status_watchdog_fail", e=_wd_err)
+            self.set_status(msg, err=True)
 
     def _retext_static(self):
         """界面语言切换后即时刷新主窗静态文字（弹窗每次打开本来就会按当前语言重建）。"""
@@ -1902,6 +2179,53 @@ def run_smoke():
           and active_targets(["EN", "JA"], {"EN", "JA"}) == []
           and active_targets(["EN"], set()) == ["EN"])
 
+    # 20 看门狗保活（U-007）：判活/判据纯函数 + 任务定义 XML + schtasks roundtrip
+    # （scratch 平铺任务名、不武装触发器——自检零副作用，绝不触碰真实任务）
+    check("watchdog default off", load_config()["watchdog_enabled"] is False)
+    m2 = f"deepl_quick_smoke_alive_{os.getpid()}"
+    check("wd alive none", _instance_alive(m2) is False)
+    check("wd alive held", (acquire_single_instance(m2), _instance_alive(m2))[1] is True)
+    check("wd revive no-log", wd_should_revive(None) is True)
+    check("wd revive clean", wd_should_revive("[2026-11-17 10:00:00 pid=1] v0.3.8 exit: clean (mainloop returned)") is False)
+    check("wd revive startup", wd_should_revive("[2026-11-17 10:00:00 pid=1] v0.3.8 startup") is True)
+    check("wd revive fatal", wd_should_revive("[2026-11-17 10:00:00 pid=1] v0.3.8 FATAL: traceback") is True)
+    check("wd revive mutex", wd_should_revive("[2026-11-17 10:00:00 pid=1] v0.3.8 exit: mutex busy") is True)
+    check("wd revive revived", wd_should_revive("[2026-11-17 10:00:00 pid=1] v0.3.8 startup (revived)") is True)
+    with open(CRASH_LOG, "w", encoding="utf-8") as f:
+        f.write("[1] app line A\n[2] wd-check: alive\n[3] wd-check: skip\n")
+    check("wd tail skips audit", _log_tail_app_line() == "[1] app line A")
+    with open(CRASH_LOG, "w", encoding="utf-8") as f:
+        f.write("   \n")
+    check("wd tail empty", _log_tail_app_line() is None)
+    check("wd tail missing", _log_tail_app_line(os.path.join(tmp, "no_such.log")) is None)
+    xml_arm = _watchdog_task_xml(start="2030-01-01T00:00:00", arm_triggers=True)
+    xml_bare = _watchdog_task_xml(start="2030-01-01T00:00:00", arm_triggers=False)
+    check("wd xml action", "--watchdog-check" in xml_bare and "InteractiveToken" in xml_bare
+          and "deepl_quick" in xml_bare and "<Command>" in xml_bare)
+    check("wd xml triggers armed", f"PT{WATCHDOG_INTERVAL_MIN}M" in xml_arm
+          and "EventID=507" in xml_arm and "&lt;QueryList&gt;" in xml_arm)
+    check("wd xml triggers bare", "<TimeTrigger>" not in xml_bare and "<EventTrigger>" not in xml_bare)
+    import xml.etree.ElementTree as ET
+    try:
+        ET.fromstring(xml_arm)
+        ET.fromstring(xml_bare)
+        wf = True
+    except ET.ParseError:
+        wf = False
+    check("wd xml wellformed", wf)
+    scratch_task = r"\deepl_quick_smoke_watchdog"   # 平铺根下：注销后不留空目录
+    try:
+        check("wd task initial absent", not watchdog_task_registered(scratch_task))
+        watchdog_task_enable(scratch_task, arm_triggers=False)
+        check("wd task created", watchdog_task_registered(scratch_task))
+        watchdog_task_enable(scratch_task, arm_triggers=False)
+        check("wd task upsert", watchdog_task_registered(scratch_task))
+    finally:
+        watchdog_task_disable(scratch_task)
+    check("wd task removed", not watchdog_task_registered(scratch_task))
+    watchdog_task_disable(scratch_task)
+    check("wd task disable idempotent", not watchdog_task_registered(scratch_task))
+
     passed = sum(1 for _n, ok in results if ok)
     for name, ok in results:
         print(f"  {'PASS' if ok else 'FAIL'}  {name}")
@@ -1910,7 +2234,9 @@ def run_smoke():
 
 
 def main():
-    _crashlog("startup")
+    if "--watchdog-check" in sys.argv:      # 短命检查模式：不写 startup 行（会污染末行判据）
+        sys.exit(run_watchdog_check())
+    _crashlog("startup (revived)" if "--revived" in sys.argv else "startup")
     if not acquire_single_instance():
         _crashlog("exit: mutex busy (another instance already running)")
         return                   # 已有实例在跑（自启的那枚药丸就在右缘）——静默退出
