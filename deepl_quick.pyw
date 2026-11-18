@@ -26,7 +26,7 @@ import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import messagebox
 
-APP_VERSION = "0.3.8"
+APP_VERSION = "0.3.9"
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE = os.path.join(APP_DIR, "config.json")
@@ -713,6 +713,41 @@ def _is_real_topmost(hwnd):
         return False
 
 
+class _POINT(ctypes.Structure):
+    _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
+
+
+_u32.WindowFromPoint.argtypes = (_POINT,)
+_u32.WindowFromPoint.restype = ctypes.c_void_p
+
+
+def _lost_topmost_band(hwnd, x, y, w, h):
+    """U-008 盲区检测：位=1 但真实带序已掉（bit-on/band-off）——窗中心
+    WindowFromPoint 命中的根窗口不是自己、且命中者不带 WS_EX_TOPMOST 位，即被
+    普通带窗口盖住。位读取（_is_real_topmost）看不见该状态：系统对非 topmost
+    带窗口的 SetWindowLong 写位静默过滤，位可在带已丢时残留为 1（2026-11-18
+    EnumWindows 序位 + WindowFromPoint + 抓屏三证在案）。命中 topmost 带邻居
+    不视为丢失——带内邻居不争顶。"""
+    try:
+        hwnd = int(hwnd)
+    except (TypeError, ValueError):
+        return False
+    if not hwnd:
+        return False
+    try:
+        root_hwnd = _u32.GetAncestor(hwnd, GA_ROOT) or hwnd
+        hit = _u32.WindowFromPoint(_POINT(int(x) + int(w) // 2, int(y) + int(h) // 2))
+        if not hit:
+            return False
+        hit_root = _u32.GetAncestor(hit, GA_ROOT) or hit
+        if hit_root == root_hwnd:
+            return False
+        ex = _u32.GetWindowLongW(hit_root, GWL_EXSTYLE)
+        return not (ex & WS_EX_TOPMOST)
+    except Exception:
+        return False
+
+
 def active_targets(targets, paused):
     """P-020：参与本次翻译的目标语＝常驻清单去掉临时停用（会话级集合）。"""
     return [t for t in targets if t not in paused]
@@ -955,6 +990,7 @@ class App:
         self._pill_font = None
         self._still = (0, 0)            # 折叠瞬间的指针位置：静止点，防弹跳
         self._auto_after = None
+        self._band_loss_logged = False  # U-008：带掉取证日志的每事件闩（健康即复位）
         self._last_usage_fetch = 0.0
         self._icon = None
         self._settings = None
@@ -1192,7 +1228,10 @@ class App:
         """U-006 方案 B：分辨率变化自愈（越界夹回主屏）＋ topmost 重申。
         只在实际越界/丢置顶时动作，避免每 150ms 扰动几何；拖动/拉伸中不干预。
         弹窗打开期间整体跳过（P-016）：重申 topmost 会把主窗重新插到 topmost 带
-        顶端，压住属主关系在它之上的设置/历史/选语言弹窗。"""
+        顶端，压住属主关系在它之上的设置/历史/选语言弹窗。
+        U-008 补带序盲区：位=1 但真实带序已掉（bit-on/band-off）时位读取看不见，
+        以窗中心自命中检测兜底；Tk attributes(True) 每次重发 SetWindowPos（P-016
+        副作用即证），位已置也能插回 topmost 带顶。"""
         if self._pressing or self._dialogs_open():
             return
         sw, sh = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
@@ -1207,10 +1246,22 @@ class App:
                 self._pill_y = ny
         if self.cfg.get("topmost"):
             try:
+                hwnd = self.root.winfo_id()
                 # 读真实样式位而非 wm_attributes：外部 SetWindowPos 降级后 Tk 缓存仍报 True
                 # （U-006 补记盲区），纯 Tk 检测在真实降级场景下永不重申
-                if not _is_real_topmost(self.root.winfo_id()):
+                if not _is_real_topmost(hwnd):
                     self.root.attributes("-topmost", True)
+                elif _lost_topmost_band(hwnd, self.root.winfo_rootx(), self.root.winfo_rooty(),
+                                        self.root.winfo_width(), self.root.winfo_height()):
+                    # 位在带掉（U-008）：只发生在系统级转换（RDP 重连/睡眠唤醒/全屏
+                    # 切换类），公开 API 无法伪造（SetWindowLong 写位被系统过滤）；
+                    # 落一条取证日志（每事件闩，防洪）供下次复发归因。
+                    if not self._band_loss_logged:
+                        _crashlog("topmost band-loss detected (bit set, buried) -> re-assert")
+                        self._band_loss_logged = True
+                    self.root.attributes("-topmost", True)
+                else:
+                    self._band_loss_logged = False
             except tk.TclError:
                 pass
 
@@ -2173,6 +2224,8 @@ def run_smoke():
 
     # 19 v0.3.7：topmost 真实样式位（U-006 盲区修复）+ P-019 卡片高度 + P-020 停用过滤
     check("real topmost invalid hwnd", _is_real_topmost(0) is False and _is_real_topmost(None) is False)
+    check("band-loss invalid hwnd", _lost_topmost_band(0, 10, 10, 39, 30) is False
+          and _lost_topmost_band(None, 10, 10, 39, 30) is False)
     check("card height floor", card_height_for(0) == 2 and card_height_for(1) == 2
           and card_height_for(5) == 5 and card_height_for(120) == 120)
     check("active targets filter", active_targets(["EN", "JA", "ZH"], {"ZH"}) == ["EN", "JA"]
